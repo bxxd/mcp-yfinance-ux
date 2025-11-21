@@ -5,7 +5,7 @@ Formats ticker screens with factor exposures, valuation, technicals.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, TypeGuard
 from zoneinfo import ZoneInfo
 
 from yfinance_ux.common.constants import (
@@ -16,6 +16,11 @@ from yfinance_ux.common.constants import (
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
 )
+
+
+def is_numeric(value: object) -> TypeGuard[int | float]:
+    """Check if value is a valid number (not None, not string like 'N/A')."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def format_options_summary(data: dict[str, Any]) -> str:
@@ -90,7 +95,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     # Factor Exposures
     lines.append("FACTOR EXPOSURES")
     beta_spx = data.get("beta_spx")
-    if beta_spx is not None:
+    if is_numeric(beta_spx):
         sensitivity = ""
         if beta_spx > BETA_HIGH_THRESHOLD:
             sensitivity = "(High sensitivity)"
@@ -100,21 +105,21 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
     idio_vol = data.get("idio_vol")
     total_vol = data.get("total_vol")
-    if idio_vol is not None:
+    if is_numeric(idio_vol):
         risk_level = ""
         if idio_vol > IDIO_VOL_HIGH_THRESHOLD:
             risk_level = "(High stock-specific risk)"
         elif idio_vol < IDIO_VOL_LOW_THRESHOLD:
             risk_level = "(Low stock-specific risk)"
         lines.append(f"Idio Vol         {idio_vol:4.1f}%   {risk_level}")
-    if total_vol is not None:
+    if is_numeric(total_vol):
         lines.append(f"Total Vol        {total_vol:4.1f}%")
 
     # Short Interest (positioning risk)
     short_pct_float = data.get("short_pct_float")
     short_ratio = data.get("short_ratio")
-    if short_pct_float is not None or short_ratio is not None:
-        if short_pct_float is not None:
+    if is_numeric(short_pct_float) or is_numeric(short_ratio):
+        if is_numeric(short_pct_float):
             # Convert from decimal to percentage if needed
             short_pct = short_pct_float * 100 if short_pct_float < 1 else short_pct_float
             squeeze_signal = ""
@@ -123,7 +128,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
             elif short_pct > 10:  # noqa: PLR2004
                 squeeze_signal = "(Moderate short interest)"
             lines.append(f"Short % Float    {short_pct:4.1f}%   {squeeze_signal}")
-        if short_ratio is not None:
+        if is_numeric(short_ratio):
             lines.append(f"Days to Cover    {short_ratio:4.1f}")
 
     lines.append("")
@@ -134,15 +139,15 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     forward_pe = data.get("forward_pe")
     dividend_yield = data.get("dividend_yield")
 
-    if any(x is not None for x in [trailing_pe, forward_pe, dividend_yield]):
+    if any(is_numeric(x) for x in [trailing_pe, forward_pe, dividend_yield]):
         lines.append("VALUATION")
         has_valuation = True
 
-    if trailing_pe is not None:
+    if is_numeric(trailing_pe):
         lines.append(f"P/E Ratio        {trailing_pe:6.2f}")
-    if forward_pe is not None:
+    if is_numeric(forward_pe):
         lines.append(f"Forward P/E      {forward_pe:6.2f}")
-    if dividend_yield is not None:
+    if is_numeric(dividend_yield):
         lines.append(f"Dividend Yield   {dividend_yield:5.2f}%")
 
     if has_valuation:
@@ -162,19 +167,19 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
             has_calendar = True
 
         if earnings_date and isinstance(earnings_date, list) and earnings_date:
-            date_str = earnings_date[0].strftime("%b %d, %Y")
-            line = f"Earnings         {date_str}"
-            if earnings_avg is not None:
+            cal_date_str = earnings_date[0].strftime("%b %d, %Y")
+            line = f"Earnings         {cal_date_str}"
+            if is_numeric(earnings_avg):
                 line += f"  (Est ${earnings_avg:.2f} EPS)"
             lines.append(line)
 
         if ex_div_date:
-            date_str = ex_div_date.strftime("%b %d, %Y")
-            lines.append(f"Ex-Dividend      {date_str}")
+            cal_date_str = ex_div_date.strftime("%b %d, %Y")
+            lines.append(f"Ex-Dividend      {cal_date_str}")
 
         if div_date:
-            date_str = div_date.strftime("%b %d, %Y")
-            lines.append(f"Div Payment      {date_str}")
+            cal_date_str = div_date.strftime("%b %d, %Y")
+            lines.append(f"Div Payment      {cal_date_str}")
 
     if has_calendar:
         lines.append("")
@@ -184,22 +189,22 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     mom_1w = data.get("momentum_1w")
     mom_1m = data.get("momentum_1m")
     mom_1y = data.get("momentum_1y")
-    if mom_1w is not None:
+    if is_numeric(mom_1w):
         lines.append(f"1-Week           {mom_1w:+6.1f}%")
-    if mom_1m is not None:
+    if is_numeric(mom_1m):
         lines.append(f"1-Month          {mom_1m:+6.1f}%")
-    if mom_1y is not None:
+    if is_numeric(mom_1y):
         lines.append(f"1-Year           {mom_1y:+6.1f}%")
 
     fifty_day = data.get("fifty_day_avg")
     two_hundred_day = data.get("two_hundred_day_avg")
-    if fifty_day is not None:
+    if is_numeric(fifty_day):
         lines.append(f"50-Day MA        {fifty_day:7.2f}")
-    if two_hundred_day is not None:
+    if is_numeric(two_hundred_day):
         lines.append(f"200-Day MA       {two_hundred_day:7.2f}")
 
     rsi = data.get("rsi")
-    if rsi is not None:
+    if is_numeric(rsi):
         rsi_signal = ""
         if rsi > RSI_OVERBOUGHT:
             rsi_signal = "(Overbought)"
@@ -212,7 +217,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     fifty_two_high = data.get("fifty_two_week_high")
     fifty_two_low = data.get("fifty_two_week_low")
 
-    if fifty_two_high is not None and fifty_two_low is not None and price is not None:
+    if is_numeric(fifty_two_high) and is_numeric(fifty_two_low) and is_numeric(price):
         lines.append("52-WEEK RANGE")
         lines.append(f"High             {fifty_two_high:7.2f}")
         lines.append(f"Low              {fifty_two_low:7.2f}")
