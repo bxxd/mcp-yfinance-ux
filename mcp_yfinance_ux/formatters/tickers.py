@@ -4,6 +4,7 @@ Ticker formatters - BBG Lite style.
 Formats ticker screens with factor exposures, valuation, technicals.
 """
 
+import math
 from datetime import datetime
 from typing import Any, TypeGuard
 from zoneinfo import ZoneInfo
@@ -275,10 +276,14 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
             # Parse transaction type from Text field (e.g., "Sale at price...")
             text = txn.get("Text", "")
-            # Extract first word (Sale, Purchase, Stock Gift, etc.)
-            transaction = (
-                (text.split()[0] if text.split() else "N/A") if text else "N/A"
-            )
+            # Extract transaction type (Sale, Purchase, Gift, etc.)
+            if text and text.startswith("Stock Gift"):
+                transaction = "Gift"
+            elif text:
+                # Extract first word for other types
+                transaction = text.split()[0] if text.split() else "N/A"
+            else:
+                transaction = "N/A"
             transaction = transaction[:10]  # Truncate to fit column
 
             shares = txn.get("Shares")
@@ -286,8 +291,11 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
             # Format shares and value
             shares_str = f"{int(shares):,}" if is_numeric(shares) else "N/A"
+            # Check if value is numeric AND not NaN (pandas NaN fails is_numeric)
             value_str = (
-                f"${value:,.0f}" if is_numeric(value) and value > 0 else "N/A"
+                f"${value:,.0f}"
+                if is_numeric(value) and not math.isnan(value)
+                else "N/A"
             )
 
             # Data row
