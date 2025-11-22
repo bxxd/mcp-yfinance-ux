@@ -151,7 +151,7 @@ async def async_main() -> int:  # noqa: PLR0911
 
     if not args.command:
         print("Error: No command specified")
-        print("Usage: ./cli list-tools | markets | sector <name> | ticker <symbol>")
+        print("Usage: ./cli list-tools | markets | sector <name> | ticker <symbol> | options <symbol> [expiration]")
         return 1
 
     if args.command == "list-tools":
