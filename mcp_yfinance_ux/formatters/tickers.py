@@ -243,6 +243,54 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(options_summary)
         lines.append("")
 
+    # Insider Transactions
+    insider_transactions = data.get("insider_transactions")
+    if insider_transactions:
+        lines.append("INSIDER TRANSACTIONS (RECENT 10)")
+        # Header row
+        header = (
+            f"{'DATE':<12} {'INSIDER':<20} {'POSITION':<20} "
+            f"{'TYPE':<10} {'SHARES':>12} {'VALUE':>15}"
+        )
+        lines.append(header)
+        lines.append("-" * 100)
+
+        for txn in insider_transactions[:10]:
+            # Parse date
+            date_val = txn.get("Start Date")
+            if date_val:
+                try:
+                    if hasattr(date_val, "strftime"):
+                        date_str_txn = date_val.strftime("%Y-%m-%d")
+                    else:
+                        date_str_txn = str(date_val)[:10]
+                except Exception:
+                    date_str_txn = "N/A"
+            else:
+                date_str_txn = "N/A"
+
+            # Get fields
+            insider = str(txn.get("Insider", "Unknown"))[:20]
+            position = str(txn.get("Position", "N/A"))[:20]
+            transaction = str(txn.get("Transaction", "N/A"))[:10]
+            shares = txn.get("Shares")
+            value = txn.get("Value")
+
+            # Format shares and value
+            shares_str = f"{int(shares):,}" if is_numeric(shares) else "N/A"
+            value_str = (
+                f"${value:,.0f}" if is_numeric(value) and value > 0 else "N/A"
+            )
+
+            # Data row
+            row = (
+                f"{date_str_txn:<12} {insider:<20} {position:<20} "
+                f"{transaction:<10} {shares_str:>12} {value_str:>15}"
+            )
+            lines.append(row)
+
+        lines.append("")
+
     # Footer
     lines.append("")
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")

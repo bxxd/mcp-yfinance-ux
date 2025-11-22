@@ -75,6 +75,16 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         # Get options data
         options_data = get_options_data(symbol, "nearest")
 
+        # Get insider transactions
+        insider_transactions = None
+        try:
+            insider_df = ticker.insider_transactions
+            if not insider_df.empty:
+                # Get most recent 10 transactions
+                insider_transactions = insider_df.head(10).to_dict('records')
+        except Exception:
+            pass
+
         return {
             "symbol": symbol,
             "name": name,
@@ -101,6 +111,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "rsi": rsi,
             "calendar": calendar,
             "options_data": options_data,
+            "insider_transactions": insider_transactions,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
