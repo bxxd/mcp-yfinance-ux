@@ -24,7 +24,7 @@ def is_numeric(value: object) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def format_options_summary(data: dict[str, Any]) -> str:
+def format_options_summary(data: dict[str, Any], current_price: float | None = None) -> str:
     """
     Format brief options summary for ticker() screen.
 
@@ -38,6 +38,7 @@ def format_options_summary(data: dict[str, Any]) -> str:
     atm_put_iv = data["atm_put_iv"]
     exp = data["expiration"]
     dte = data["dte"]
+    max_pain = data.get("max_pain_strike")
 
     # Sentiment
     sentiment = "BULLISH" if pc_oi < 0.8 else "BEARISH" if pc_oi > 1.2 else "NEUTRAL"  # noqa: PLR2004
@@ -46,8 +47,18 @@ def format_options_summary(data: dict[str, Any]) -> str:
         "OPTIONS POSITIONING",
         f"P/C Ratio (OI):  {pc_oi:.2f}    ← {sentiment}",
         f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)",
-        f"Nearest Exp:  {exp} ({dte}d)",
     ]
+
+    # Add max pain if available
+    if max_pain and is_numeric(max_pain) and max_pain > 0:
+        if current_price and is_numeric(current_price):
+            distance = ((max_pain - current_price) / current_price) * 100
+            direction = "above" if distance > 0 else "below"
+            lines.append(f"Max Pain:  ${max_pain:.2f}  ({abs(distance):.1f}% {direction} current)")
+        else:
+            lines.append(f"Max Pain:  ${max_pain:.2f}")
+
+    lines.append(f"Nearest Exp:  {exp} ({dte}d)")
 
     return "\n".join(lines)
 
@@ -240,7 +251,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     options_data = data.get("options_data")
     if options_data and not options_data.get("error"):
         # Format brief summary for ticker overview
-        options_summary = format_options_summary(options_data)
+        options_summary = format_options_summary(options_data, price)
         lines.append(options_summary)
         lines.append("")
 
