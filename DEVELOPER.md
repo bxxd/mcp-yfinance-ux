@@ -96,7 +96,7 @@ Displays:
 - Calendar (Earnings, Ex-Div, Div Payment)
 - Momentum & Technicals (1W, 1M, 1Y, 50-day MA, 200-day MA, RSI)
 - 52-week range with visual bar
-- Options Positioning Summary (P/C ratio, ATM IV, nearest expiration, pointer to ticker_options for full analysis)
+- Options Positioning Summary (P/C ratio, ATM IV with historical percentile, max pain, unusual activity flags, nearest expiration, pointer to ticker_options for full analysis)
 
 ### ticker_options(symbol, expiration='nearest')
 **Options chain analysis - comprehensive positioning, IV, volume, and unusual activity**
