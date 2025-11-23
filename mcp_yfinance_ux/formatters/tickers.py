@@ -276,9 +276,13 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
             # Parse transaction type from Text field (e.g., "Sale at price...")
             text = txn.get("Text", "")
-            # Extract transaction type (Sale, Purchase, Gift, etc.)
+            # Extract transaction type (Sale, Purchase, Gift, Grant, Award, etc.)
             if text and text.startswith("Stock Gift"):
                 transaction = "Gift"
+            elif text and "Award" in text:
+                transaction = "Award"
+            elif text and "Grant" in text:
+                transaction = "Grant"
             elif text:
                 # Extract first word for other types
                 transaction = text.split()[0] if text.split() else "N/A"
