@@ -256,6 +256,9 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(header)
         lines.append("-" * 100)
 
+        # Get current price for value estimation
+        current_price = data.get("price")
+
         for txn in insider_transactions[:10]:
             # Parse date
             date_val = txn.get("Start Date")
@@ -295,12 +298,17 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
             # Format shares and value
             shares_str = f"{int(shares):,}" if is_numeric(shares) else "N/A"
-            # Check if value is numeric AND not NaN (pandas NaN fails is_numeric)
-            value_str = (
-                f"${value:,.0f}"
-                if is_numeric(value) and not math.isnan(value)
-                else "N/A"
-            )
+
+            # Calculate value if missing: use shares × current price
+            if is_numeric(value) and not math.isnan(value) and value > 0:
+                # Have actual value
+                value_str = f"${value:,.0f}"
+            elif is_numeric(shares) and is_numeric(current_price):
+                # Estimate value from shares × current price
+                estimated_value = shares * current_price
+                value_str = f"~${estimated_value:,.0f}"
+            else:
+                value_str = "N/A"
 
             # Data row
             row = (
