@@ -114,12 +114,12 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         except Exception:
             pass
 
-        # Get recent upgrades/downgrades (last 5)
+        # Get recent upgrades/downgrades (last 10)
         recent_upgrades = None
         try:
             upgrades_df = ticker.upgrades_downgrades
             if upgrades_df is not None and not upgrades_df.empty:
-                recent_upgrades = upgrades_df.head(5).reset_index().to_dict('records')
+                recent_upgrades = upgrades_df.head(10).reset_index().to_dict('records')
         except Exception:
             pass
 

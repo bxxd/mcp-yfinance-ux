@@ -85,7 +85,7 @@ SINGLE: ticker('TSLA')
 - Analyst Recommendations: Strong Buy/Buy/Hold/Sell counts, consensus sentiment
 - Analyst Price Targets: Mean/median targets, range, upside to target
 - Earnings History: Last 4 quarters (actual vs estimate, surprise %, beat/miss)
-- Recent Analyst Actions: Last 5 upgrades/downgrades with price targets
+- Recent Analyst Actions: Last 10 upgrades/downgrades with price targets
 
 BATCH: ticker(['TSLA', 'F', 'GM'])
 - Side-by-side table

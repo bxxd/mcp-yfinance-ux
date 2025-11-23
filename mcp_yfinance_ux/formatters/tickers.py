@@ -404,11 +404,11 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     # Recent Upgrades/Downgrades
     recent_upgrades = data.get("recent_upgrades")
     if recent_upgrades:
-        lines.append("RECENT ANALYST ACTIONS (LAST 5)")
+        lines.append("RECENT ANALYST ACTIONS (LAST 10)")
         lines.append(f"{'DATE':<12} {'FIRM':<20} {'ACTION':<15} {'TARGET':>10}")
         lines.append("-" * 70)
 
-        for upgrade in recent_upgrades[:5]:
+        for upgrade in recent_upgrades[:10]:
             date_val = upgrade.get("GradeDate")
             if hasattr(date_val, "strftime"):
                 date_str_upg = date_val.strftime("%Y-%m-%d")
