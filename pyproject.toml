@@ -36,6 +36,10 @@ disallow_any_unimported = true
 no_implicit_optional = true
 check_untyped_defs = true
 warn_unreachable = true
+exclude = [
+    ".*\\.archived.*",
+    ".*\\.duplicate-archived.*",
+]
 
 # Strict linting (comprehensive checks)
 [tool.ruff]

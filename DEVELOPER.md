@@ -21,22 +21,33 @@ make logs       # Tail server logs
 
 ## Architecture
 
+**Two-package structure:**
+- `yfinance_ux/` - **Pure library** (system-wide pip installable, zero MCP dependencies)
+- `mcp_yfinance_ux/` - **MCP server** (imports from yfinance_ux)
+
 **Clean separation:**
-- `mcp_yfinance_ux/market_data.py` - Business logic (zero MCP dependencies)
-- `mcp_yfinance_ux/tools.py` - MCP tool definitions (single source of truth)
-- `mcp_yfinance_ux/server.py` - MCP protocol wrapper, stdio transport (for local CLI)
-- `mcp_yfinance_ux/server_http.py` - MCP protocol wrapper, SSE/HTTP transport (for alpha-server)
-- `mcp_yfinance_ux/historical.py` - Optimized data fetching
-- `mcp_yfinance_ux/cli.py` - CLI for testing
+- `yfinance_ux/` - Data fetching and processing library
+  - `fetcher.py` - Historical data fetching (individual `yf.Ticker().history()` + ThreadPoolExecutor - RELIABLE)
+  - `common/` - Symbol normalization, dates, constants
+  - `calculations/` - Momentum, volatility, technical indicators
+  - `services/` - Market data, tickers, sectors, options
+- `mcp_yfinance_ux/` - MCP protocol layer
+  - `market_data.py` - Business logic (imports from yfinance_ux)
+  - `tools.py` - MCP tool definitions (single source of truth)
+  - `server.py` - MCP stdio transport (for local CLI)
+  - `server_http.py` - MCP SSE/HTTP transport (for alpha-server)
+  - `formatters/` - BBG Lite output formatting
+  - `historical.py` - Re-exports from yfinance_ux (backward compatibility)
+  - `cli.py` - CLI for testing
 
 **No MCP in business logic. Protocol layer is just routing.**
 
+**Pattern: Individual yf.Ticker().history() (RELIABLE), NOT yf.download() (UNRELIABLE - timeouts)**
+
 **DRY principle enforced:**
-- Tool definitions live in `tools.py` **only** (single source of truth)
-- Both `server.py` and `server_http.py` import from `tools.py`
-- To add/modify tools: Edit `tools.py` (not the server files)
-- Both servers automatically get the same tool set
-- Test: `./cli list-tools` and check alpha-server connections
+- Data fetching logic in yfinance_ux (ONE SOURCE OF TRUTH)
+- Tool definitions in `tools.py` only (both servers import from it)
+- No duplication between packages
 
 ## Tools (4 Screens)
 
@@ -85,7 +96,7 @@ Displays:
 - Calendar (Earnings, Ex-Div, Div Payment)
 - Momentum & Technicals (1W, 1M, 1Y, 50-day MA, 200-day MA, RSI)
 - 52-week range with visual bar
-- Options Positioning Summary (P/C ratio, ATM IV, nearest expiration, pointer to ticker_options for full analysis)
+- Options Positioning Summary (P/C ratio, ATM IV with historical percentile, max pain, unusual activity flags, nearest expiration, pointer to ticker_options for full analysis)
 
 ### ticker_options(symbol, expiration='nearest')
 **Options chain analysis - comprehensive positioning, IV, volume, and unusual activity**
@@ -235,19 +246,68 @@ make test
 
 ```
 mcp-yfinance-ux/
-├── mcp_yfinance_ux/          # Core package (all app code)
-│   ├── server.py             # MCP protocol wrapper
+├── yfinance_ux/              # Pure library (system-wide installable)
+│   ├── __init__.py           # Package exports
+│   ├── fetcher.py            # Historical data fetching (RELIABLE pattern)
+│   ├── common/               # Symbols, dates, constants
+│   ├── calculations/         # Momentum, volatility, RSI
+│   └── services/             # Market data, tickers, sectors, options
+├── mcp_yfinance_ux/          # MCP server (imports from yfinance_ux)
+│   ├── server.py             # MCP stdio transport
+│   ├── server_http.py        # MCP SSE/HTTP transport
 │   ├── market_data.py        # Business logic (no MCP deps)
-│   ├── historical.py         # Optimized data fetching
-│   └── cli.py                # CLI tools
+│   ├── historical.py         # Re-exports from yfinance_ux
+│   ├── tools.py              # MCP tool definitions
+│   ├── cli.py                # CLI implementation
+│   └── formatters/           # BBG Lite output formatting
 ├── tests/                    # Tests
 ├── docs/                     # Documentation
-├── cli                       # Bash wrapper
+├── cli                       # Bash wrapper for CLI
 ├── Makefile                  # Dev commands
 ├── pyproject.toml            # Poetry config + mypy/ruff
 ├── DEVELOPER.md              # This file
 └── README.md                 # User docs
 ```
+
+**Installation:**
+System-wide via `.pth` file: `/usr/local/lib/python3.12/dist-packages/yfinance-ux.pth`
+- Points to: `/home/ubuntu/idio/mcp-yfinance-ux`
+- All tenant users can `import yfinance_ux`
+
+## Library Maintenance Workflow
+
+**When updating `yfinance_ux/` library:**
+
+### 1. Edit the library
+```bash
+cd /home/ubuntu/idio/mcp-yfinance-ux/yfinance_ux
+vim fetcher.py  # Or any other module
+```
+
+### 2. Test MCP server still works
+```bash
+cd /home/ubuntu/idio/mcp-yfinance-ux
+make all                     # Lint + test
+./cli ticker TSLA            # Manual test
+# OR use MCP tool directly
+mcp__yfinance-ux__ticker '{"symbol": "TSLA"}'
+```
+
+### 3. Test portfolio scripts (if applicable)
+```bash
+# Portfolio scripts now import from system-wide yfinance_ux
+# Changes are immediately available to all tenant users
+
+# Test with portfolio agent
+cd /home/ubuntu/idio/agent-tools
+make build  # Rebuild agent-tools dist/
+
+# Deploy to test (ALWAYS ASK USER FIRST!)
+cd /home/ubuntu/idio/alpha-server
+cargo run --bin tools setup breed --sync  # DEV first
+```
+
+**No file copying needed:** System-wide installation via `.pth` file means all users automatically get updates.
 
 ## Development Workflow
 

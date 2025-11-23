@@ -4,7 +4,6 @@ Explore yfinance capabilities - what data can we actually get?
 """
 
 import yfinance as yf
-import json
 from pprint import pprint
 
 def explore_ticker(symbol="AAPL"):

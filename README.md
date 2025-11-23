@@ -1,8 +1,8 @@
 # mcp-yfinance-ux
 
-**For AI agents:** Market data in Bloomberg Terminal format. Not raw JSON - I give you formatted tables you can read directly. Navigate like BBG: `markets()` → `sector('technology')` → `ticker('AAPL')` → `news('AAPL')`. Smart defaults (auto-detects market hours), progressive disclosure (summary → detail).
+**For AI agents:** Market data in Bloomberg Terminal format. Not raw JSON - I give you formatted tables you can read directly. Navigate like BBG: `markets()` → `sector('technology')` → `ticker('AAPL')` → `ticker_options('AAPL')`. Smart defaults (auto-detects market hours), progressive disclosure (summary → detail).
 
-**For humans:** Dense, scannable screens. Factor exposures, momentum, news - all formatted like a professional terminal.
+**For humans:** Dense, scannable screens. Factor exposures, momentum, options positioning - all formatted like a professional terminal.
 
 **Technical:** Local stdio server, powered by yfinance. All queries user-initiated (no automation - this is a research tool, not production infrastructure).
 
@@ -45,6 +45,34 @@ Dense, scannable, professional. Not raw JSON - formatted for humans, AI benefits
 - **Batch comparison** - Side-by-side stock analysis with key factors
 - **Calendar integration** - Earnings dates, dividend schedules
 - **BBG Lite formatting** - Dense, scannable, professional output
+
+## Library Architecture
+
+**mcp-yfinance-ux includes a reusable library for reliable yfinance data fetching.**
+
+### lib/yfinance_fetcher.py
+
+**ONE SOURCE OF TRUTH for yfinance fetching logic:**
+- Individual `yf.Ticker().history()` calls with ThreadPoolExecutor (RELIABLE)
+- NOT `yf.download()` batch API (UNRELIABLE - timeouts, fails entire batch)
+
+**Used by:**
+1. **MCP server** - `mcp_yfinance_ux/historical.py` imports from `lib/`
+2. **Portfolio scripts** - Can be copied to portfolio agents for reliable fetching
+3. **Any Python code** - Pure logic, no MCP dependencies
+
+**Key functions:**
+- `fetch_price_history(symbol, months=12)` - Single symbol history
+- `fetch_multiple_histories(symbols, months=12)` - Parallel multi-symbol fetch
+- `fetch_ticker_and_market(symbol, months=12)` - Ticker + market data (for factor analysis)
+- `fetch_price_at_date(symbol, date)` - Price at specific date (narrow window)
+
+**Why this pattern works:**
+- Individual fetches don't fail as a batch
+- ThreadPoolExecutor provides parallelism without batch API
+- Proven in production use (MCP server serving real users)
+
+**Documentation:** See `lib/README.md` for usage examples and deployment workflow.
 
 ## Important: Usage Limitations
 

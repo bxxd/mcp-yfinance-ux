@@ -8,7 +8,6 @@ Usage:
   ./cli sector technology    # Sector drill-down screen
   ./cli ticker TSLA          # Individual ticker screen (detailed)
   ./cli ticker TSLA F GM     # Batch comparison (table format)
-  ./cli news TSLA            # News screen for a ticker
   ./cli options PALL         # Options chain analysis (nearest expiration)
   ./cli options PALL 2025-12-20  # Options for specific expiration
 
@@ -22,13 +21,11 @@ import sys
 
 from .market_data import (
     format_markets,
-    format_news,
     format_options,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
-    get_news_data,
     get_options_data,
     get_sector_data,
     get_ticker_screen_data,
@@ -91,14 +88,6 @@ def ticker_command(symbols: list[str]) -> int:
     return 0
 
 
-def news_command(symbol: str) -> int:
-    """Show news() screen"""
-    data = get_news_data(symbol)
-    output = format_news(data)
-    print(output)
-    return 0
-
-
 def options_command(symbol: str, expiration: str = "nearest") -> int:
     """Show options() screen"""
     data = get_options_data(symbol, expiration)
@@ -119,7 +108,6 @@ Examples:
   %(prog)s sector technology
   %(prog)s ticker TSLA                # Single ticker (detailed)
   %(prog)s ticker TSLA F GM           # Batch comparison (table)
-  %(prog)s news TSLA                  # News for ticker
   %(prog)s options PALL               # Options analysis (nearest expiration)
   %(prog)s options PALL 2025-12-20    # Options for specific expiration
         """
@@ -145,10 +133,6 @@ Examples:
         "symbols", nargs="+", help="Ticker symbol(s) (e.g., TSLA or TSLA F GM)"
     )
 
-    # news command
-    news_parser = subparsers.add_parser("news", help="News screen for a ticker")
-    news_parser.add_argument("symbol", help="Ticker symbol (e.g., TSLA)")
-
     # options command
     options_parser = subparsers.add_parser("options", help="Options chain analysis")
     options_parser.add_argument("symbol", help="Ticker symbol (e.g., PALL)")
@@ -167,7 +151,10 @@ async def async_main() -> int:  # noqa: PLR0911
 
     if not args.command:
         print("Error: No command specified")
-        print("Usage: ./cli list-tools | markets | sector <name> | ticker <symbol>")
+        print(
+            "Usage: ./cli list-tools | markets | sector <name> | "
+            "ticker <symbol> | options <symbol> [expiration]"
+        )
         return 1
 
     if args.command == "list-tools":
@@ -181,9 +168,6 @@ async def async_main() -> int:  # noqa: PLR0911
 
     if args.command == "ticker":
         return ticker_command(args.symbols)
-
-    if args.command == "news":
-        return news_command(args.symbol)
 
     if args.command == "options":
         return options_command(args.symbol, args.expiration)

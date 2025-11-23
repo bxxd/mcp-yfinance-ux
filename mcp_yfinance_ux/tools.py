@@ -20,21 +20,18 @@ def get_mcp_tools() -> list[Tool]:
         Tool(
             name="markets",
             description="""
-Market overview screen - complete factor landscape.
+Complete market overview - indices, sectors, styles, commodities, rates.
 
-Shows:
-- US EQUITIES (S&P 500, Nasdaq, Dow, Russell 2000)
-- GLOBAL (Europe, Asia, China)
-- SECTORS (all 11 GICS sectors with momentum)
-- STYLES (Momentum, Value, Growth, Quality, Size)
-- COMMODITIES (Gold, Oil, Natural Gas)
-- VOLATILITY & RATES (VIX, 10Y Treasury)
+Coverage:
+- US equities (S&P 500, Nasdaq, Dow, Russell 2000)
+- Global markets (Europe, Asia)
+- All 11 GICS sectors with momentum
+- Style factors (Momentum, Value, Growth, Quality, Size)
+- Commodities (Gold, Oil, Nat Gas), Volatility (VIX), Rates (10Y)
 
-All with momentum (1M, 1Y trailing returns).
+Shows current price, change %, 1M and 1Y momentum for each.
 
-Output: BBG Lite formatted text (dense, scannable, professional).
-
-Navigation: Drill down with sector('technology') or ticker('AAPL')
+Use this to scan the entire market landscape at a glance.
 """,
             inputSchema={
                 "type": "object",
@@ -45,22 +42,16 @@ Navigation: Drill down with sector('technology') or ticker('AAPL')
         Tool(
             name="sector",
             description="""
-Sector drill-down screen - detailed sector analysis.
+Sector drill-down - ETF performance + top 10 holdings.
 
-Shows:
-- Sector ETF price and momentum (1M, 1Y)
-- Top 10 holdings with symbol, name, and weight
-- Navigation back to markets() or drill to ticker()
+Shows sector ETF price, momentum (1M/1Y), and largest positions with weights.
 
-Input: Sector name (e.g., 'technology', 'real estate', 'financials')
+Input: Sector name
+- 'technology', 'financials', 'healthcare', 'energy'
+- 'consumer_disc', 'consumer_stpl', 'industrials'
+- 'materials', 'utilities', 'real_estate', 'communication'
 
-Accepts both display names and normalized names:
-- 'technology' or 'tech'
-- 'real estate' or 'real_estate'
-- 'consumer discretionary' or 'consumer_disc'
-- 'consumer staples' or 'consumer_stpl'
-
-Output: BBG Lite formatted text (dense, scannable, professional).
+Use this to analyze sector composition and performance.
 """,
             inputSchema={
                 "type": "object",
@@ -81,56 +72,33 @@ Output: BBG Lite formatted text (dense, scannable, professional).
         Tool(
             name="ticker",
             description="""
-Individual security screen - complete factor analysis.
+Security analysis - factors, valuation, technicals, options, insider, analyst, earnings.
 
-SINGLE TICKER MODE:
-Input: symbol as string (e.g., 'TSLA')
-Shows: Detailed analysis with full factor exposures, valuation, technicals
+SINGLE: ticker('TSLA')
+- Factor exposures: Beta SPX, Idio Vol, Total Vol, Short Interest
+- Valuation: P/E, Fwd P/E, Div Yield
+- Calendar: Earnings, Ex-Div dates
+- Momentum: 1W/1M/1Y, 50/200 MA, RSI
+- 52-wk range + viz
+- Options: P/C ratio, ATM IV summary
+- Insider Transactions: Recent 10 trades (date, insider, position, type, shares, value)
+- Analyst Recommendations: Strong Buy/Buy/Hold/Sell counts, consensus sentiment
+- Analyst Price Targets: Mean/median targets, range, upside to target
+- Earnings History: Last 4 quarters (actual vs estimate, surprise %, beat/miss)
+- Recent Analyst Actions: Last 10 upgrades/downgrades with price targets
 
-BATCH COMPARISON MODE:
-Input: symbol as array of strings (e.g., ['TSLA', 'F', 'GM'])
-Shows: Side-by-side comparison table with key factors
+BATCH: ticker(['TSLA', 'F', 'GM'])
+- Side-by-side table
+- Price, Chg%, Beta, Idio Vol
+- Mom (1W/1M/1Y), P/E, Div%, RSI
 
-Example output for ticker('TSLA'):
+Single = deep dive. Batch = compare.
 
-TICKER TSLA
-
-LAST PRICE  460.55 +8.13  +1.80%
-
-Tesla, Inc.                              MKT CAP  1531.7B    VOLUME  79.8M
-
-FACTOR EXPOSURES
-Beta (SPX)       2.09    (High sensitivity)
-Idio Vol         49.9%   (High stock-specific risk)
-Total Vol        67.9%
-
-VALUATION
-P/E Ratio        317.62
-Forward P/E      142.15
-
-CALENDAR
-Earnings         Oct 22, 2025  (Est $0.44 EPS)
-
-MOMENTUM & TECHNICALS
-1-Month            +3.9%
-1-Year            +75.4%
-50-Day MA         400.44
-200-Day MA        336.07
-RSI (14D)         57.5
-
-52-WEEK RANGE
-High              488.54
-Low               214.25
-Current           460.55  [=================░░░]  90% of range
-
-OPTIONS POSITIONING
-P/C Ratio (OI):  0.57    ← BULLISH
-ATM IV:  55.5% (calls)  51.5% (puts)
-Nearest Exp:  2025-11-21 (23d)
-
-For full analysis: ticker_options('TSLA')
-
-Output: BBG Lite formatted text (dense, scannable, professional).
+MACRO FACTORS (for Paleologo regression analysis):
+- Treasury Rates: ^TNX (10Y), ^IRX (2Y), ^TYX (30Y), ^FVX (5Y)
+- Commodities: CL=F (Oil WTI), NG=F (Nat Gas), GC=F (Gold), SI=F (Silver)
+- Volatility: ^VIX
+- Currencies: EURUSD=X, JPY=X, CNY=X, GBPUSD=X
 """,
             inputSchema={
                 "type": "object",
@@ -152,66 +120,22 @@ Output: BBG Lite formatted text (dense, scannable, professional).
         Tool(
             name="ticker_options",
             description="""
-Options chain analysis screen - comprehensive positioning, IV, Greeks, unusual activity.
+Options chain - positioning, IV, skew, term structure, unusual activity.
 
-Shows EVERYTHING:
-- Positioning: P/C ratio (OI + volume), ITM/OTM breakdown, sentiment
-- Top Strikes: Top 10 by OI (with volume), calls and puts side-by-side
-- IV Structure: ATM IV calls/puts, spread analysis
-- Vol Skew: OTM vs ATM (panic premium detection)
-- Term Structure: Near/mid/far IV, contango analysis
-- Volume Analysis: P/C volume ratio, unusual activity detection
-- Max Pain: Strike with most option seller pain
-- Unusual Activity: Strikes with volume > 2x OI (flags + top examples)
-- Historical IV: 30-day hist vol, 52-week IV range, IV rank percentile
-- All Expirations: Summary of all available expirations with IV/OI/volume
-- Interpretation: Context insights (NO recommendations)
+Shows:
+- Positioning: P/C ratio (OI+vol), ITM/OTM breakdown
+- Top strikes by OI: Top 10 calls/puts, side-by-side
+- IV structure: ATM calls/puts, spread
+- Vol skew: OTM vs ATM (panic detection)
+- Term structure: Near/mid/far IV, contango
+- Volume analysis: P/C vol ratio, unusual (vol > 2x OI)
+- Max pain: Strike w/ most seller pain
+- Historical IV: 30d hist vol, 52-wk IV range, percentile
+- All expirations: Summary table
 
-Input:
-- symbol: Ticker symbol (e.g., 'PALL', 'AAPL')
-- expiration (optional): 'nearest' (default) or specific date like '2025-12-20'
+Input: symbol, expiration ('nearest' or 'YYYY-MM-DD')
 
-Example output for ticker_options('PALL'):
-
-PALL US EQUITY                          OPTIONS ANALYSIS
-Last: $127.88                          Exp: 2025-11-21 (23d)  |  ATM: $130
-
-POSITIONING (Open Interest)
-Calls:  4,598 OI
-Puts:   2,617 OI
-P/C Ratio:  0.57    ← BULLISH (calls 1.8x puts)
-
-TOP POSITIONS BY OI (Top 10)
-CALLS                                            PUTS
-Strike    OI      Vol     Last      IV           Strike    OI      Vol     Last      IV
-──────────────────────────────────────────────   ──────────────────────────────────────────────
-$160      1,173      10   $ 1.07    60.8%          $115        494       4   $ 2.04     50.8%
-$150        898      43   $ 1.81    63.5%          $116        451       1   $ 2.63     50.4%
-
-IMPLIED VOLATILITY
-ATM Calls:     55.5%
-ATM Puts:      51.5%
-Spread:        +4.0% calls  ← UNUSUAL (calls typically lower)
-
-VOL SKEW
-OTM Puts vs ATM:  +5.5%
-OTM Calls vs ATM: +13.0%
-
-TERM STRUCTURE
-Near (23d):    55.5%       ← Current
-Mid (51d):    53.8%
-Far (142d):    47.5%
-Contango:     +8.0%       ← Market expects compression (to 47.5%)
-
-INTERPRETATION
-• Heavy call positioning: OI P/C 0.57 (1.8x calls vs puts)
-• Calls IV elevated: 4.0% above puts
-• Term structure contango: market pricing vol compression from 55.5% → 47.5%
-
-Output: BBG Lite formatted text (dense, scannable, professional).
-Context delivery system - NO recommendations.
-
-Navigation: Back to ticker('PALL') for price/factor data
+Context delivery. No recommendations.
 """,
             inputSchema={
                 "type": "object",
