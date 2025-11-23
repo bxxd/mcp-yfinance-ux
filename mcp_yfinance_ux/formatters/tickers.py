@@ -39,6 +39,9 @@ def format_options_summary(data: dict[str, Any], current_price: float | None = N
     exp = data["expiration"]
     dte = data["dte"]
     max_pain = data.get("max_pain_strike")
+    unusual_calls = data.get("unusual_calls", [])
+    unusual_puts = data.get("unusual_puts", [])
+    hist_iv_data = data.get("hist_iv_data", {})
 
     # Sentiment
     sentiment = "BULLISH" if pc_oi < 0.8 else "BEARISH" if pc_oi > 1.2 else "NEUTRAL"  # noqa: PLR2004
@@ -46,8 +49,26 @@ def format_options_summary(data: dict[str, Any], current_price: float | None = N
     lines = [
         "OPTIONS POSITIONING",
         f"P/C Ratio (OI):  {pc_oi:.2f}    ← {sentiment}",
-        f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)",
     ]
+
+    # Add ATM IV with historical context if available
+    if hist_iv_data and "iv_rank" in hist_iv_data:
+        iv_rank = hist_iv_data["iv_rank"]
+        iv_low = hist_iv_data.get("iv_low_52w", 0)
+        iv_high = hist_iv_data.get("iv_high_52w", 0)
+
+        # Add percentile context
+        if is_numeric(iv_rank):
+            percentile_str = f"{int(iv_rank)}th %ile"
+            if iv_rank >= 80:  # noqa: PLR2004
+                percentile_str += " (EXPENSIVE)"
+            elif iv_rank <= 20:  # noqa: PLR2004
+                percentile_str += " (CHEAP)"
+            lines.append(f"ATM IV:  {atm_call_iv:.1f}% ({percentile_str} vs 52-wk: {iv_low:.0f}%-{iv_high:.0f}%)")
+        else:
+            lines.append(f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)")
+    else:
+        lines.append(f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)")
 
     # Add max pain if available
     if max_pain and is_numeric(max_pain) and max_pain > 0:
@@ -57,6 +78,14 @@ def format_options_summary(data: dict[str, Any], current_price: float | None = N
             lines.append(f"Max Pain:  ${max_pain:.2f}  ({abs(distance):.1f}% {direction} current)")
         else:
             lines.append(f"Max Pain:  ${max_pain:.2f}")
+
+    # Add unusual activity if present
+    unusual_call_count = len(unusual_calls) if hasattr(unusual_calls, '__len__') else 0
+    unusual_put_count = len(unusual_puts) if hasattr(unusual_puts, '__len__') else 0
+    total_unusual = unusual_call_count + unusual_put_count
+
+    if total_unusual > 0:
+        lines.append(f"⚠ Unusual Activity:  {unusual_call_count} calls, {unusual_put_count} puts (vol > 2x OI)")
 
     lines.append(f"Nearest Exp:  {exp} ({dte}d)")
 
