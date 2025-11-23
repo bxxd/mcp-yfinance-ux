@@ -307,6 +307,128 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
         lines.append("")
 
+    # Analyst Recommendations
+    analyst_recs = data.get("analyst_recommendations")
+    if analyst_recs:
+        lines.append("ANALYST RECOMMENDATIONS")
+        strong_buy = analyst_recs.get("strongBuy", 0)
+        buy = analyst_recs.get("buy", 0)
+        hold = analyst_recs.get("hold", 0)
+        sell = analyst_recs.get("sell", 0)
+        strong_sell = analyst_recs.get("strongSell", 0)
+        total = strong_buy + buy + hold + sell + strong_sell
+
+        lines.append(
+            f"Strong Buy: {strong_buy}  |  Buy: {buy}  |  Hold: {hold}  |  "
+            f"Sell: {sell}  |  Strong Sell: {strong_sell}"
+        )
+        if total > 0:
+            bullish_pct = ((strong_buy + buy) / total) * 100
+            bearish_pct = ((sell + strong_sell) / total) * 100
+            sentiment = (
+                "BULLISH" if bullish_pct > 60  # noqa: PLR2004
+                else "BEARISH" if bearish_pct > 40  # noqa: PLR2004
+                else "NEUTRAL"
+            )
+            lines.append(
+                f"Consensus: {sentiment}  "
+                f"({bullish_pct:.0f}% bullish, {bearish_pct:.0f}% bearish)"
+            )
+        lines.append("")
+
+    # Analyst Price Targets
+    price_targets = data.get("analyst_price_targets")
+    if price_targets and isinstance(price_targets, dict):
+        lines.append("ANALYST PRICE TARGETS")
+        current = price_targets.get("current")
+        mean = price_targets.get("mean")
+        median = price_targets.get("median")
+        low = price_targets.get("low")
+        high = price_targets.get("high")
+
+        if mean and median:
+            lines.append(f"Mean Target:   ${mean:.2f}")
+            lines.append(f"Median Target: ${median:.2f}")
+        if low and high:
+            lines.append(f"Range:         ${low:.2f} - ${high:.2f}")
+        if current and mean:
+            upside = ((mean - current) / current) * 100
+            upside_str = f"+{upside:.1f}%" if upside > 0 else f"{upside:.1f}%"
+            lines.append(f"Upside:        {upside_str} to mean target")
+        lines.append("")
+
+    # Earnings History
+    earnings_hist = data.get("earnings_history")
+    if earnings_hist:
+        lines.append("EARNINGS HISTORY (LAST 4 QUARTERS)")
+        lines.append(
+            f"{'QUARTER':<12} {'ACTUAL':>8} {'ESTIMATE':>8} "
+            f"{'SURPRISE':>10} {'%':>8}"
+        )
+        lines.append("-" * 60)
+
+        for earning in earnings_hist:
+            quarter_name = earning.get("quarter", "")
+            if hasattr(quarter_name, "strftime"):
+                # Format as YYYY-MM (e.g., 2024-12 for Q4)
+                quarter_str = quarter_name.strftime("%Y-%m")
+            else:
+                quarter_str = str(quarter_name)[:10]
+
+            actual = earning.get("epsActual")
+            estimate = earning.get("epsEstimate")
+            surprise_pct = earning.get("surprisePercent")
+
+            actual_str = f"${actual:.2f}" if is_numeric(actual) else "N/A"
+            estimate_str = f"${estimate:.2f}" if is_numeric(estimate) else "N/A"
+
+            if is_numeric(surprise_pct):
+                surprise_val = surprise_pct * 100
+                surprise_str = f"{surprise_val:+.1f}%"
+                # Beat/miss indicator
+                indicator = "✓" if surprise_val > 0 else "✗" if surprise_val < -2 else "≈"  # noqa: PLR2004
+            else:
+                surprise_str = "N/A"
+                indicator = ""
+
+            lines.append(
+                f"{quarter_str:<12} {actual_str:>8} {estimate_str:>8} "
+                f"{indicator:>10} {surprise_str:>8}"
+            )
+        lines.append("")
+
+    # Recent Upgrades/Downgrades
+    recent_upgrades = data.get("recent_upgrades")
+    if recent_upgrades:
+        lines.append("RECENT ANALYST ACTIONS (LAST 5)")
+        lines.append(f"{'DATE':<12} {'FIRM':<20} {'ACTION':<15} {'TARGET':>10}")
+        lines.append("-" * 70)
+
+        for upgrade in recent_upgrades[:5]:
+            date_val = upgrade.get("GradeDate")
+            if hasattr(date_val, "strftime"):
+                date_str_upg = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str_upg = str(date_val)[:10] if date_val else "N/A"
+
+            firm = str(upgrade.get("Firm", ""))[:20]
+            to_grade = upgrade.get("ToGrade", "")
+            from_grade = upgrade.get("FromGrade", "")
+
+            # Build action string
+            if from_grade and from_grade != to_grade:
+                action_str = f"{from_grade} → {to_grade}"[:15]
+            else:
+                action_str = to_grade[:15]
+
+            target = upgrade.get("currentPriceTarget")
+            target_str = f"${target:.0f}" if is_numeric(target) else "N/A"
+
+            lines.append(
+                f"{date_str_upg:<12} {firm:<20} {action_str:<15} {target_str:>10}"
+            )
+        lines.append("")
+
     # Footer
     lines.append("")
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")

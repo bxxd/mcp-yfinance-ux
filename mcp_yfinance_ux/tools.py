@@ -72,16 +72,20 @@ Use this to analyze sector composition and performance.
         Tool(
             name="ticker",
             description="""
-Security analysis - factor exposures, valuation, technicals, options, insider activity.
+Security analysis - factors, valuation, technicals, options, insider, analyst, earnings.
 
 SINGLE: ticker('TSLA')
-- Factor exposures: Beta SPX, Idio Vol, Total Vol
+- Factor exposures: Beta SPX, Idio Vol, Total Vol, Short Interest
 - Valuation: P/E, Fwd P/E, Div Yield
 - Calendar: Earnings, Ex-Div dates
 - Momentum: 1W/1M/1Y, 50/200 MA, RSI
 - 52-wk range + viz
 - Options: P/C ratio, ATM IV summary
 - Insider Transactions: Recent 10 trades (date, insider, position, type, shares, value)
+- Analyst Recommendations: Strong Buy/Buy/Hold/Sell counts, consensus sentiment
+- Analyst Price Targets: Mean/median targets, range, upside to target
+- Earnings History: Last 4 quarters (actual vs estimate, surprise %, beat/miss)
+- Recent Analyst Actions: Last 5 upgrades/downgrades with price targets
 
 BATCH: ticker(['TSLA', 'F', 'GM'])
 - Side-by-side table

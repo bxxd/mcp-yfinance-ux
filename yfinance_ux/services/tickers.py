@@ -85,6 +85,44 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         except Exception:
             pass
 
+        # Get analyst data
+        analyst_recommendations = None
+        analyst_price_targets = None
+        try:
+            # Recommendations summary (current month)
+            recs = ticker.recommendations
+            if recs is not None and not recs.empty:
+                analyst_recommendations = recs.iloc[0].to_dict()
+        except Exception:
+            pass
+
+        try:
+            # Price targets consensus
+            analyst_price_targets = ticker.analyst_price_targets
+        except Exception:
+            pass
+
+        # Get earnings history
+        earnings_history = None
+        try:
+            earnings_df = ticker.earnings_history
+            if not earnings_df.empty:
+                # Get last 4 quarters, reset index to include quarter date
+                earnings_history = (
+                    earnings_df.tail(4).reset_index().to_dict('records')
+                )
+        except Exception:
+            pass
+
+        # Get recent upgrades/downgrades (last 5)
+        recent_upgrades = None
+        try:
+            upgrades_df = ticker.upgrades_downgrades
+            if upgrades_df is not None and not upgrades_df.empty:
+                recent_upgrades = upgrades_df.head(5).reset_index().to_dict('records')
+        except Exception:
+            pass
+
         return {
             "symbol": symbol,
             "name": name,
@@ -112,6 +150,10 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "calendar": calendar,
             "options_data": options_data,
             "insider_transactions": insider_transactions,
+            "analyst_recommendations": analyst_recommendations,
+            "analyst_price_targets": analyst_price_targets,
+            "earnings_history": earnings_history,
+            "recent_upgrades": recent_upgrades,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
