@@ -432,9 +432,9 @@ cashflow.loc['Issuance Of Debt']             # Debt issuance (positive = inflow)
 ('2025-10-24', '2025-10-31', '2025-11-07', ...)
 ```
 
-### `.option_chain(date)` - Calls & Puts Data
+### `.option_chain(date)` - Calls & Puts Data (Raw)
 
-**When to use**: Implied volatility, put/call ratio, unusual activity
+**When to use**: Get raw option chain data
 
 **Returns**: Object with `.calls` and `.puts` DataFrames
 
@@ -455,10 +455,88 @@ puts = chain.puts    # Puts DataFrame
 - `openInterest`: Open interest
 - `impliedVolatility`: Implied volatility
 
-**Use cases**:
-- IV spike: `impliedVolatility` jump = uncertainty/fear
-- Put/call ratio: `puts.volume.sum() / calls.volume.sum()`
-- Unusual volume: `volume > 2 * openInterest` = informed flow?
+**⚠️ Missing from yfinance:**
+- Greeks (delta, gamma, vega, theta, rho) - Yahoo doesn't provide
+- Real-time data (15-20 min delay)
+- Bid/ask spreads (only last price reliable)
+- Historical options data
+
+### `ticker_options()` MCP Tool - Comprehensive Analysis (Implemented)
+
+**Our implementation adds extensive analytics on top of raw yfinance data:**
+
+**Positioning:**
+- P/C ratio (OI and volume)
+- ITM/OTM breakdown with percentages
+- Top 10 strikes by OI (calls + puts side-by-side)
+- Top 10 strikes by volume
+
+**IV Analysis:**
+- ATM IV for calls/puts
+- Vol skew (OTM vs ATM)
+- Term structure (near/mid/far expirations)
+- Historical IV context (30-day hist vol, 52-week range, IV rank percentile)
+
+**Advanced Analytics:**
+- Max pain calculation (strike minimizing option seller losses)
+- Unusual activity detection (volume > 2x OI)
+- All expirations summary (IV/OI/volume for all dates)
+- Context-based interpretation (NO recommendations)
+
+**Example output:**
+```
+AAPL US EQUITY                          OPTIONS ANALYSIS
+Last: $150.25                           Exp: 2025-01-17 (55d)  |  ATM: $150
+
+POSITIONING (Open Interest)
+Calls:  125,000 OI
+Puts:   95,000 OI
+P/C Ratio:  0.76    ← BULLISH (calls 1.3x puts)
+
+TOP POSITIONS BY OI (Top 10)
+CALLS
+Strike    OI      Vol     Last      IV
+──────────────────────────────────────────────
+$150   10,250  5,120   $5.20   28.5%
+$155    8,500  3,200   $2.80   30.1%
+...
+
+IMPLIED VOLATILITY
+ATM Calls:     28.5%
+ATM Puts:      27.8%
+Spread:        +0.7% calls
+
+VOL SKEW
+OTM Puts vs ATM:  +2.1%
+OTM Calls vs ATM: +1.3%
+
+TERM STRUCTURE
+Near (55d):    28.5%       ← Current
+Mid (90d):     26.2%
+Far (180d):    24.8%
+Contango:     +3.7%       ← Market expects compression
+
+UNUSUAL ACTIVITY (Vol > 2x OI)
+Unusual Call Strikes: 3
+Top Unusual Calls:
+  $160  Vol:15,000  OI:5,000  Ratio:3.0x
+...
+
+HISTORICAL IV CONTEXT
+Current ATM IV:  28.5%
+30-Day Hist Vol: 25.2%
+52-Week IV Range: 18.5% - 42.3%
+IV Rank:  42%  (percentile in 52-week range)
+
+ALL EXPIRATIONS (8 available)
+Exp Date       DTE     IV     Total OI    Total Vol
+─────────────────────────────────────────────────────
+2025-01-17    55d   28.5%    220,000      18,500
+2025-02-21    90d   26.2%    185,000      12,300
+...
+```
+
+**See:** `yfinance_ux/services/options.py` for implementation
 
 ## SEC Filings
 
