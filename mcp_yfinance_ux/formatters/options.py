@@ -61,8 +61,8 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
         [
             "TOP POSITIONS BY OI (Top 10)",
             "CALLS",
-            "Strike    OI      Vol     Last      IV",
-            "──────────────────────────────────────────────",
+            "Strike    OI      Vol     Last      IV     Delta  Gamma   Vega  Theta",
+            "─────────────────────────────────────────────────────────────────────────",
         ]
     )
 
@@ -74,7 +74,14 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
         vol = int(c["volume"])
         last = c["lastPrice"]
         iv = c["impliedVolatility"] * 100
-        lines.append(f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>5.1f}%")
+        delta = c["delta"]
+        gamma = c["gamma"]
+        vega = c["vega"]
+        theta = c["theta"]
+        lines.append(
+            f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>4.1f}%  "
+            f"{delta:>5.2f}  {gamma:>5.3f}  {vega:>5.2f}  {theta:>5.2f}"
+        )
 
     lines.append("")
 
@@ -82,8 +89,8 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
     lines.extend(
         [
             "PUTS",
-            "Strike    OI      Vol     Last      IV",
-            "──────────────────────────────────────────────",
+            "Strike    OI      Vol     Last      IV     Delta  Gamma   Vega  Theta",
+            "─────────────────────────────────────────────────────────────────────────",
         ]
     )
 
@@ -95,7 +102,14 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
         vol = int(p["volume"])
         last = p["lastPrice"]
         iv = p["impliedVolatility"] * 100
-        lines.append(f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>5.1f}%")
+        delta = p["delta"]
+        gamma = p["gamma"]
+        vega = p["vega"]
+        theta = p["theta"]
+        lines.append(
+            f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>4.1f}%  "
+            f"{delta:>5.2f}  {gamma:>5.3f}  {vega:>5.2f}  {theta:>5.2f}"
+        )
 
     lines.append("")
 
@@ -117,6 +131,32 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             "",
         ]
     )
+
+    # Greeks (ATM strike)
+    atm_call_greeks = data.get("atm_call_greeks", {})
+    atm_put_greeks = data.get("atm_put_greeks", {})
+
+    if atm_call_greeks:
+        call_delta = atm_call_greeks.get("delta", 0)
+        call_gamma = atm_call_greeks.get("gamma", 0)
+        call_vega = atm_call_greeks.get("vega", 0)
+        call_theta = atm_call_greeks.get("theta", 0)
+
+        put_delta = atm_put_greeks.get("delta", 0)
+        put_gamma = atm_put_greeks.get("gamma", 0)
+        put_vega = atm_put_greeks.get("vega", 0)
+        put_theta = atm_put_greeks.get("theta", 0)
+
+        lines.extend(
+            [
+                "GREEKS (ATM Strike)",
+                f"Delta:   Call {call_delta:>5.2f}   Put {put_delta:>6.2f}",
+                f"Gamma:   Call {call_gamma:>5.3f}   Put {put_gamma:>6.3f}",
+                f"Vega:    Call {call_vega:>5.2f}   Put {put_vega:>6.2f}",
+                f"Theta:   Call {call_theta:>5.2f}   Put {put_theta:>6.2f}   (per day)",
+                "",
+            ]
+        )
 
     # Vol skew
     put_skew = data["put_skew"]

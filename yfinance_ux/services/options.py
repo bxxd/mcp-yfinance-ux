@@ -2,7 +2,7 @@
 Options chain data service.
 
 Comprehensive options analysis: positioning, IV structure, term structure,
-unusual activity, max pain calculation, historical IV context.
+unusual activity, max pain calculation, historical IV context, greeks.
 """
 
 from datetime import datetime
@@ -11,7 +11,24 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf  # type: ignore[import-untyped]
 
+from yfinance_ux.calculations.greeks import calculate_greeks
 from yfinance_ux.common.symbols import normalize_ticker_symbol
+
+
+def get_risk_free_rate() -> float:
+    """
+    Fetch 10Y Treasury yield as risk-free rate.
+
+    Returns:
+        Risk-free rate as decimal (0.045 = 4.5%)
+    """
+    try:
+        tnx = yf.Ticker("^TNX")
+        # TNX is in %, convert to decimal
+        rate = tnx.fast_info.get("lastPrice", 4.5) / 100
+        return float(rate)
+    except Exception:
+        return 0.045  # Fallback to 4.5%
 
 
 def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915, PLR0912
@@ -55,6 +72,47 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         # Current price (for ATM calculation)
         current_price = ticker.fast_info.get("lastPrice", 0)
 
+        # Get risk-free rate and dividend yield for greeks calculation
+        risk_free_rate = get_risk_free_rate()
+        dividend_yield = ticker.info.get("dividendYield", 0.0) or 0.0
+
+        # Days to expiration
+        exp_datetime = datetime.strptime(exp_date, "%Y-%m-%d").replace(
+            tzinfo=ZoneInfo("America/New_York")
+        )
+        now = datetime.now(ZoneInfo("America/New_York"))
+        dte = (exp_datetime - now).days
+        time_to_expiry = max(dte / 365.0, 0.001)  # Prevent division by zero
+
+        # Calculate greeks for each option
+        def add_greeks(row: Any, option_type: str) -> Any:
+            """Add greeks to option row."""
+            try:
+                greeks = calculate_greeks(
+                    spot=current_price,
+                    strike=row["strike"],
+                    time_to_expiry=time_to_expiry,
+                    volatility=row["impliedVolatility"],
+                    risk_free_rate=risk_free_rate,
+                    dividend_yield=dividend_yield,
+                    option_type=option_type,
+                )
+                row["delta"] = greeks["delta"]
+                row["gamma"] = greeks["gamma"]
+                row["vega"] = greeks["vega"]
+                row["theta"] = greeks["theta"]
+                row["rho"] = greeks["rho"]
+            except Exception:
+                row["delta"] = 0.0
+                row["gamma"] = 0.0
+                row["vega"] = 0.0
+                row["theta"] = 0.0
+                row["rho"] = 0.0
+            return row
+
+        calls = calls.apply(lambda row: add_greeks(row, "call"), axis=1)
+        puts = puts.apply(lambda row: add_greeks(row, "put"), axis=1)
+
         # Calculate positioning metrics
         call_oi_total = int(calls["openInterest"].sum())
         put_oi_total = int(puts["openInterest"].sum())
@@ -67,27 +125,45 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         # Find ATM strike (closest to current price)
         atm_strike = calls["strike"].iloc[(calls["strike"] - current_price).abs().argsort()[0]]
 
-        # Get ATM IV
+        # Get ATM IV and greeks
         atm_call_row = calls[calls["strike"] == atm_strike]
         atm_put_row = puts[puts["strike"] == atm_strike]
 
         atm_call_iv = float(atm_call_row["impliedVolatility"].values[0] * 100)
         atm_put_iv = float(atm_put_row["impliedVolatility"].values[0] * 100)
 
+        # ATM greeks
+        atm_call_greeks = {
+            "delta": float(atm_call_row["delta"].values[0]),
+            "gamma": float(atm_call_row["gamma"].values[0]),
+            "vega": float(atm_call_row["vega"].values[0]),
+            "theta": float(atm_call_row["theta"].values[0]),
+        }
+        atm_put_greeks = {
+            "delta": float(atm_put_row["delta"].values[0]),
+            "gamma": float(atm_put_row["gamma"].values[0]),
+            "vega": float(atm_put_row["vega"].values[0]),
+            "theta": float(atm_put_row["theta"].values[0]),
+        }
+
         # Top positions by OI (expand to 10)
         top_calls_oi = calls.nlargest(10, "openInterest")[
-            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility",
+             "delta", "gamma", "vega", "theta"]
         ].copy()
         top_puts_oi = puts.nlargest(10, "openInterest")[
-            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility",
+             "delta", "gamma", "vega", "theta"]
         ].copy()
 
         # Top positions by volume
         top_calls_vol = calls.nlargest(10, "volume")[
-            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility",
+             "delta", "gamma", "vega", "theta"]
         ].copy()
         top_puts_vol = puts.nlargest(10, "volume")[
-            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility",
+             "delta", "gamma", "vega", "theta"]
         ].copy()
 
         # ITM vs OTM breakdown
@@ -287,6 +363,9 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             "atm_call_iv": atm_call_iv,
             "atm_put_iv": atm_put_iv,
             "iv_spread": atm_call_iv - atm_put_iv,
+            # Greeks
+            "atm_call_greeks": atm_call_greeks,
+            "atm_put_greeks": atm_put_greeks,
             # Skew
             "put_skew": put_skew,
             "call_skew": call_skew,

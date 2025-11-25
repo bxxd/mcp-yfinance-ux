@@ -64,7 +64,10 @@ def format_options_summary(data: dict[str, Any], current_price: float | None = N
                 percentile_str += " (EXPENSIVE)"
             elif iv_rank <= 20:  # noqa: PLR2004
                 percentile_str += " (CHEAP)"
-            lines.append(f"ATM IV:  {atm_call_iv:.1f}% ({percentile_str} vs 52-wk: {iv_low:.0f}%-{iv_high:.0f}%)")
+            lines.append(
+                f"ATM IV:  {atm_call_iv:.1f}% "
+                f"({percentile_str} vs 52-wk: {iv_low:.0f}%-{iv_high:.0f}%)"
+            )
         else:
             lines.append(f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)")
     else:
@@ -80,12 +83,15 @@ def format_options_summary(data: dict[str, Any], current_price: float | None = N
             lines.append(f"Max Pain:  ${max_pain:.2f}")
 
     # Add unusual activity if present
-    unusual_call_count = len(unusual_calls) if hasattr(unusual_calls, '__len__') else 0
-    unusual_put_count = len(unusual_puts) if hasattr(unusual_puts, '__len__') else 0
+    unusual_call_count = len(unusual_calls) if hasattr(unusual_calls, "__len__") else 0
+    unusual_put_count = len(unusual_puts) if hasattr(unusual_puts, "__len__") else 0
     total_unusual = unusual_call_count + unusual_put_count
 
     if total_unusual > 0:
-        lines.append(f"⚠ Unusual Activity:  {unusual_call_count} calls, {unusual_put_count} puts (vol > 2x OI)")
+        lines.append(
+            f"⚠ Unusual Activity:  {unusual_call_count} calls, "
+            f"{unusual_put_count} puts (vol > 2x OI)"
+        )
 
     lines.append(f"Nearest Exp:  {exp} ({dte}d)")
 
@@ -339,12 +345,12 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
             # Format shares and value
             shares_str = f"{int(shares):,}" if is_numeric(shares) else "N/A"
 
-            # Calculate value if missing: use shares × current price
+            # Calculate value if missing: use shares x current price
             if is_numeric(value) and not math.isnan(value) and value > 0:
                 # Have actual value
                 value_str = f"${value:,.0f}"
             elif is_numeric(shares) and is_numeric(current_price):
-                # Estimate value from shares × current price
+                # Estimate value from shares x current price
                 estimated_value = shares * current_price
                 value_str = f"~${estimated_value:,.0f}"
             else:
@@ -535,23 +541,24 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         div_yield = data.get("dividend_yield")
         rsi = data.get("rsi")
 
-        # Format each field with proper handling of None
-        price_str = f"{price:10.2f}" if price is not None else " " * 10
-        chg_str = f"{change_pct:+7.2f}%" if change_pct is not None else " " * 8
-        beta_str = f"{beta_spx:6.2f}" if beta_spx is not None else " " * 6
-        idio_str = f"{idio_vol:5.1f}%" if idio_vol is not None else " " * 6
+        # Format each field with proper handling of None and non-numeric values
+        # (yfinance sometimes returns strings like 'Infinity' for P/E)
+        price_str = f"{price:10.2f}" if is_numeric(price) else " " * 10
+        chg_str = f"{change_pct:+7.2f}%" if is_numeric(change_pct) else " " * 8
+        beta_str = f"{beta_spx:6.2f}" if is_numeric(beta_spx) else " " * 6
+        idio_str = f"{idio_vol:5.1f}%" if is_numeric(idio_vol) else " " * 6
         # Convert short % from decimal to percentage
-        if short_pct_float is not None:
+        if is_numeric(short_pct_float):
             short_pct = short_pct_float * 100 if short_pct_float < 1 else short_pct_float
             short_str = f"{short_pct:7.1f}%"
         else:
             short_str = " " * 8
-        mom_1w_str = f"{mom_1w:+7.1f}%" if mom_1w is not None else " " * 8
-        mom_1m_str = f"{mom_1m:+7.1f}%" if mom_1m is not None else " " * 8
-        mom_1y_str = f"{mom_1y:+7.1f}%" if mom_1y is not None else " " * 8
-        pe_str = f"{trailing_pe:8.2f}" if trailing_pe is not None else " " * 8
-        div_str = f"{div_yield:5.2f}%" if div_yield is not None else " " * 6
-        rsi_str = f"{rsi:6.1f}" if rsi is not None else " " * 6
+        mom_1w_str = f"{mom_1w:+7.1f}%" if is_numeric(mom_1w) else " " * 8
+        mom_1m_str = f"{mom_1m:+7.1f}%" if is_numeric(mom_1m) else " " * 8
+        mom_1y_str = f"{mom_1y:+7.1f}%" if is_numeric(mom_1y) else " " * 8
+        pe_str = f"{trailing_pe:8.2f}" if is_numeric(trailing_pe) else " " * 8
+        div_str = f"{div_yield:5.2f}%" if is_numeric(div_yield) else " " * 6
+        rsi_str = f"{rsi:6.1f}" if is_numeric(rsi) else " " * 6
 
         line = (
             f"{symbol:8} {name:30} {price_str} {chg_str} "
