@@ -174,6 +174,55 @@ def fetch_ticker_and_market(
     )
 
 
+def fetch_ticker_info(symbol: str) -> dict[str, Any]:
+    """
+    Fetch ticker.info for a single symbol
+
+    Args:
+        symbol: Ticker symbol
+
+    Returns:
+        Info dictionary, empty dict on error
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        return ticker.info or {}
+    except Exception:
+        return {}
+
+
+def fetch_multiple_infos(
+    symbols: list[str],
+    max_workers: int = 10
+) -> dict[str, dict[str, Any]]:
+    """
+    Fetch ticker.info for multiple symbols in parallel
+
+    Args:
+        symbols: List of ticker symbols
+        max_workers: Max concurrent API calls
+
+    Returns:
+        Dictionary mapping symbol -> info dict
+    """
+    results: dict[str, dict[str, Any]] = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_symbol = {
+            executor.submit(fetch_ticker_info, symbol): symbol
+            for symbol in symbols
+        }
+
+        for future in as_completed(future_to_symbol):
+            symbol = future_to_symbol[future]
+            try:
+                results[symbol] = future.result()
+            except Exception:
+                results[symbol] = {}
+
+    return results
+
+
 def fetch_price_at_date(
     symbol: str,
     target_date: datetime,

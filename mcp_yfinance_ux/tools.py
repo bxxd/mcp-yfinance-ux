@@ -19,19 +19,9 @@ def get_mcp_tools() -> list[Tool]:
     return [
         Tool(
             name="markets",
-            description="""
-Complete market overview - indices, sectors, styles, commodities, rates.
+            description="""Market overview: indices, sectors, styles, commodities, rates.
 
-Coverage:
-- US equities (S&P 500, Nasdaq, Dow, Russell 2000)
-- Global markets (Europe, Asia)
-- All 11 GICS sectors with momentum
-- Style factors (Momentum, Value, Growth, Quality, Size)
-- Commodities (Gold, Oil, Nat Gas), Volatility (VIX), Rates (10Y)
-
-Shows current price, change %, 1M and 1Y momentum for each.
-
-Use this to scan the entire market landscape at a glance.
+US/Global equities, 11 GICS sectors, style factors, VIX, 10Y. Price, change%, 1M/1Y momentum.
 """,
             inputSchema={
                 "type": "object",
@@ -41,17 +31,9 @@ Use this to scan the entire market landscape at a glance.
         ),
         Tool(
             name="sector",
-            description="""
-Sector drill-down - ETF performance + top 10 holdings.
+            description="""Sector drill-down: ETF performance + top 10 holdings with weights.
 
-Shows sector ETF price, momentum (1M/1Y), and largest positions with weights.
-
-Input: Sector name
-- 'technology', 'financials', 'healthcare', 'energy'
-- 'consumer_disc', 'consumer_stpl', 'industrials'
-- 'materials', 'utilities', 'real_estate', 'communication'
-
-Use this to analyze sector composition and performance.
+sector("technology") → XLK price, 1M/1Y momentum, top holdings
 """,
             inputSchema={
                 "type": "object",
@@ -71,34 +53,12 @@ Use this to analyze sector composition and performance.
         ),
         Tool(
             name="ticker",
-            description="""
-Security analysis - factors, valuation, technicals, options, insider, analyst, earnings.
+            description="""Security analysis: factors, valuation, technicals, insider, analyst.
 
-SINGLE: ticker('TSLA')
-- Factor exposures: Beta SPX, Idio Vol, Total Vol, Short Interest
-- Valuation: P/E, Fwd P/E, Div Yield
-- Calendar: Earnings, Ex-Div dates
-- Momentum: 1W/1M/1Y, 50/200 MA, RSI
-- 52-wk range + viz
-- Options: P/C ratio, ATM IV summary
-- Insider Transactions: Recent 10 trades (date, insider, position, type, shares, value)
-- Analyst Recommendations: Strong Buy/Buy/Hold/Sell counts, consensus sentiment
-- Analyst Price Targets: Mean/median targets, range, upside to target
-- Earnings History: Last 4 quarters (actual vs estimate, surprise %, beat/miss)
-- Recent Analyst Actions: Last 10 upgrades/downgrades with price targets
+ticker("TSLA") → beta, idio vol, P/E, momentum, 52wk, options, insider
+ticker(["TSLA", "F"]) → side-by-side comparison
 
-BATCH: ticker(['TSLA', 'F', 'GM'])
-- Side-by-side table
-- Price, Chg%, Beta, Idio Vol
-- Mom (1W/1M/1Y), P/E, Div%, RSI
-
-Single = deep dive. Batch = compare.
-
-MACRO FACTORS (for Paleologo regression analysis):
-- Treasury Rates: ^TNX (10Y), ^IRX (2Y), ^TYX (30Y), ^FVX (5Y)
-- Commodities: CL=F (Oil WTI), NG=F (Nat Gas), GC=F (Gold), SI=F (Silver)
-- Volatility: ^VIX
-- Currencies: EURUSD=X, JPY=X, CNY=X, GBPUSD=X
+Macro: ^TNX, ^VIX, CL=F, GC=F, EURUSD=X for regression.
 """,
             inputSchema={
                 "type": "object",
@@ -119,23 +79,10 @@ MACRO FACTORS (for Paleologo regression analysis):
         ),
         Tool(
             name="ticker_options",
-            description="""
-Options chain - positioning, IV, skew, term structure, unusual activity.
+            description="""Options chain: positioning, IV, skew, term structure, unusual activity.
 
-Shows:
-- Positioning: P/C ratio (OI+vol), ITM/OTM breakdown
-- Top strikes by OI: Top 10 calls/puts, side-by-side
-- IV structure: ATM calls/puts, spread
-- Vol skew: OTM vs ATM (panic detection)
-- Term structure: Near/mid/far IV, contango
-- Volume analysis: P/C vol ratio, unusual (vol > 2x OI)
-- Max pain: Strike w/ most seller pain
-- Historical IV: 30d hist vol, 52-wk IV range, percentile
-- All expirations: Summary table
-
-Input: symbol, expiration ('nearest' or 'YYYY-MM-DD')
-
-Context delivery. No recommendations.
+ticker_options("AAPL") → P/C ratio, top strikes, IV skew, max pain, unusual vol
+ticker_options("AAPL", "2025-01-17") → specific expiration
 """,
             inputSchema={
                 "type": "object",
