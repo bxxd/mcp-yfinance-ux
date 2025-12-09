@@ -107,9 +107,9 @@ When updating `yfinance_ux/` library:
 
 ## Installation
 
-System-wide via `.pth` file: `/usr/local/lib/python3.12/dist-packages/yfinance-ux.pth`
+System-wide via `.pth` file pointing to project root.
 
-Points to: `/home/ubuntu/idio/mcp-yfinance-ux`
+Poetry manages dependencies, no manual installation needed.
 
 ## yfinance Constraints
 
