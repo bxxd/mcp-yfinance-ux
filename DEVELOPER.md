@@ -29,19 +29,30 @@ Key files:
 ## Tools
 
 Four screen-based tools:
-- `markets()` - Market overview (indices, sectors, styles, commodities, rates)
-- `sector(name)` - Sector ETF + top 10 holdings
-- `ticker(symbol)` - Single or batch comparison (factors, valuation, technicals, options)
-- `ticker_options(symbol, expiration)` - Options analysis (OI, IV, skew, unusual activity)
+
+**markets()** - Market overview with indices, sectors, styles, commodities, rates. Shows momentum (1M, 1Y).
+
+**sector(name)** - Sector ETF + top 10 holdings with weights, prices, momentum.
+
+**ticker(symbol)** - Single or batch comparison. Shows factors (beta, idio vol), valuation (P/E), momentum (1W, 1M, 1Y), technicals (MA, RSI), 52wk range, options summary.
+
+**ticker_options(symbol, expiration)** - Options analysis. Shows OI positioning, top strikes, IV structure, skew, term structure, max pain, unusual activity (volume > 2x OI).
 
 Output: BBG Lite format (dense, scannable text)
 
 ## Core Principles
 
-1. **Separation** - Business logic has zero MCP deps
-2. **Single source of truth** - Import, don't duplicate
-3. **UI not API** - Screen-based tools (markets → sector → ticker)
-4. **Strict types** - Zero mypy/ruff warnings
+### Separation of Concerns
+Business logic (market_data.py) has zero MCP dependencies. Protocol layer is just routing.
+
+### Single Source of Truth
+Import, don't duplicate. Data fetching in yfinance_ux, tool definitions in tools.py.
+
+### UI Not API
+Screen-based tools match Bloomberg Terminal flow (markets → sector → ticker), not REST endpoints.
+
+### Strict Type Checking
+Zero mypy/ruff warnings. Catch errors at dev time.
 
 ## Performance
 
@@ -50,19 +61,55 @@ Output: BBG Lite format (dense, scannable text)
 - Parallel fetching (ThreadPoolExecutor)
 - Batch API (`yf.Tickers()`)
 
-## Development
+## File Structure
+
+```
+mcp-yfinance-ux/
+├── yfinance_ux/              # Pure library
+│   ├── fetcher.py            # Historical data
+│   ├── common/               # Symbols, dates, constants
+│   ├── calculations/         # Momentum, volatility, RSI
+│   └── services/             # Market data, tickers, sectors, options
+├── mcp_yfinance_ux/          # MCP server
+│   ├── server_http.py        # HTTP/SSE transport
+│   ├── market_data.py        # Business logic
+│   ├── tools.py              # MCP tool definitions
+│   ├── cli.py                # CLI for testing
+│   └── formatters/           # BBG Lite output
+├── tests/                    # Tests
+├── Makefile                  # Dev commands
+└── pyproject.toml            # Poetry config
+```
+
+## Development Workflow
 
 ```bash
-make all        # lint + test (must pass before commit)
-make server     # Start server
-make logs       # View logs (logs/server.log)
+# Code quality (ALWAYS before committing)
+make all        # lint + test (must pass)
+make lint       # mypy + ruff
+make test       # run tests
+make lint-fix   # auto-fix issues
+
+# Server management
+make server     # Start server (HTTP port 5001)
+make logs       # Tail logs (logs/server.log)
 ```
 
 Log format: `[YYYY/MM/DD HH:MM:SS:XXXX] [LEVEL] message`
 
+## Library Maintenance Workflow
+
+When updating `yfinance_ux/` library:
+
+1. Edit the library
+2. Test: `make all && ./cli ticker TSLA`
+3. System-wide via `.pth` file - changes immediately available to all users
+
 ## Installation
 
 System-wide via `.pth` file: `/usr/local/lib/python3.12/dist-packages/yfinance-ux.pth`
+
+Points to: `/home/ubuntu/idio/mcp-yfinance-ux`
 
 ## yfinance Constraints
 
