@@ -323,6 +323,25 @@ make server     # Start server (HTTP port 5001)
 make logs       # Tail logs
 ```
 
+## Logging
+
+**HTTP server (`server_http.py`) uses structured logging with millisecond precision:**
+
+Format: `[YYYY/MM/DD HH:MM:SS:XXXX] [LEVEL] message`
+
+Example:
+```
+[2025/12/09 13:53:06:6662] [INFO] New SSE connection from 127.0.0.1
+[2025/12/09 13:53:06:6665] [INFO] call_tool: name=ticker, arguments={'symbol': 'TSLA'}
+[2025/12/09 13:53:07:1234] [INFO] ticker(TSLA) returning 2847 chars
+```
+
+**Precision:** 0.1ms (4 digits after seconds) for performance monitoring
+
+**Logs location:** `logs/server.log`
+
+**View logs:** `make logs` or `tail -f logs/server.log`
+
 ## Dependencies
 
 ```toml
