@@ -83,6 +83,8 @@ mcp-yfinance-ux/
 
 ## Development Workflow
 
+All commands in `Makefile`:
+
 ```bash
 # Code quality (ALWAYS before committing)
 make all        # lint + test (must pass)
@@ -94,6 +96,8 @@ make lint-fix   # auto-fix issues
 make server     # Start server (HTTP port 5001)
 make logs       # Tail logs (logs/server.log)
 ```
+
+See `Makefile` for all commands.
 
 Log format: `[YYYY/MM/DD HH:MM:SS:XXXX] [LEVEL] message`
 
