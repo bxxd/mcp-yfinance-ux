@@ -83,7 +83,7 @@ mcp-yfinance-ux/
 
 ## Development Workflow
 
-All commands in `Makefile`:
+All commands in @Makefile:
 
 ```bash
 # Code quality (ALWAYS before committing)
@@ -97,7 +97,7 @@ make server     # Start server (HTTP port 5001)
 make logs       # Tail logs (logs/server.log)
 ```
 
-See `Makefile` for all commands.
+See @Makefile for all commands.
 
 Log format: `[YYYY/MM/DD HH:MM:SS:XXXX] [LEVEL] message`
 
