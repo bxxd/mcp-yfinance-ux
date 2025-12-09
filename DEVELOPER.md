@@ -107,9 +107,14 @@ When updating `yfinance_ux/` library:
 
 ## Installation
 
-System-wide via `.pth` file pointing to project root.
+`yfinance_ux` library is system-wide installable (zero MCP deps). Other projects can import:
 
-Poetry manages dependencies, no manual installation needed.
+```python
+from yfinance_ux.fetcher import fetch_price_at_date
+from yfinance_ux.calculations import calculate_momentum
+```
+
+MCP server imports from yfinance_ux. Poetry manages dependencies.
 
 ## yfinance Constraints
 
