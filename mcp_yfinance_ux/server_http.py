@@ -11,8 +11,10 @@ Configuration:
 - PORT: Server port (default: 5001)
 """
 
+import logging
 import os
 import signal
+from datetime import datetime, timezone
 from typing import Any
 
 from mcp.server import Server
@@ -36,6 +38,36 @@ from .market_data import (
     get_ticker_screen_data_batch,
 )
 from .tools import get_mcp_tools
+
+# Configure logging with millisecond precision
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
+    datefmt="%Y/%m/%d %H:%M:%S:%f"
+)
+
+# Custom formatter to get milliseconds in the right format
+class MillisecondFormatter(logging.Formatter):
+    """Custom formatter with milliseconds as :XXXX format"""
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802
+        """Override formatTime to include milliseconds with : separator"""
+        ct = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        if datefmt:
+            # Format without milliseconds first
+            s = ct.strftime("%Y/%m/%d %H:%M:%S")
+            # Add milliseconds with : separator
+            ms = int((record.created % 1) * 10000)  # Get 4 digits of precision
+            return f"{s}:{ms:04d}"
+        return super().formatTime(record, datefmt)
+
+# Apply custom formatter to root logger
+for handler in logging.root.handlers:
+    handler.setFormatter(MillisecondFormatter(
+        "[%(asctime)s] [%(levelname)s] %(message)s",
+        datefmt="%Y/%m/%d %H:%M:%S"
+    ))
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 DEFAULT_PORT = 5001
@@ -69,12 +101,12 @@ async def list_tools() -> list[Tool]:
 @mcp_server.call_tool()  # type: ignore[misc]
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: ANN401
     """Handle tool execution - thin wrapper around core business logic"""
-    print(f"[MCP-SERVER] call_tool: name={name}, arguments={arguments}", flush=True)
+    logger.info(f"call_tool: name={name}, arguments={arguments}")
 
     if name == "markets":
         data = get_markets_data()
         formatted = format_markets(data)
-        print(f"[MCP-SERVER] markets() returning {len(formatted)} chars", flush=True)
+        logger.info(f"markets() returning {len(formatted)} chars")
         return [TextContent(type="text", text=formatted)]
 
     if name == "sector":
@@ -84,7 +116,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
             raise ValueError(msg)
         data = get_sector_data(sector_name)
         formatted = format_sector(data)
-        print(f"[MCP-SERVER] sector({sector_name}) returning {len(formatted)} chars", flush=True)
+        logger.info(f"sector({sector_name}) returning {len(formatted)} chars")
         return [TextContent(type="text", text=formatted)]
 
     if name == "ticker":
@@ -98,16 +130,13 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
             # Batch comparison mode - use batch API to avoid hammering Yahoo
             data_list = get_ticker_screen_data_batch(symbol)
             formatted = format_ticker_batch(data_list)
-            print(
-                f"[MCP-SERVER] ticker({symbol}) batch returning {len(formatted)} chars",
-                flush=True
-            )
+            logger.info(f"ticker({symbol}) batch returning {len(formatted)} chars")
             return [TextContent(type="text", text=formatted)]
 
         # Single ticker mode
         data = get_ticker_screen_data(symbol)
         formatted = format_ticker(data)
-        print(f"[MCP-SERVER] ticker({symbol}) returning {len(formatted)} chars", flush=True)
+        logger.info(f"ticker({symbol}) returning {len(formatted)} chars")
         return [TextContent(type="text", text=formatted)]
 
     if name == "ticker_options":
@@ -118,10 +147,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
         expiration = arguments.get("expiration", "nearest")
         data = get_options_data(symbol, expiration)
         formatted = format_options(data)
-        print(
-            f"[MCP-SERVER] ticker_options({symbol}, {expiration}) returning {len(formatted)} chars",
-            flush=True
-        )
+        logger.info(f"ticker_options({symbol}, {expiration}) returning {len(formatted)} chars")
         return [TextContent(type="text", text=formatted)]
 
     msg = f"Unknown tool: {name}"
@@ -150,16 +176,16 @@ async def handle_sse(request: Request) -> Response:
     with the connection streams, and returns when client disconnects.
     """
     client_addr = request.client.host if request.client else "unknown"
-    print(f"[MCP-SERVER] New SSE connection from {client_addr}", flush=True)
+    logger.info(f"New SSE connection from {client_addr}")
 
     async with sse_transport.connect_sse(
         request.scope, request.receive, request._send
     ) as streams:
-        print("[MCP-SERVER] SSE connected, running MCP server loop", flush=True)
+        logger.info("SSE connected, running MCP server loop")
         await mcp_server.run(
             streams[0], streams[1], mcp_server.create_initialization_options()
         )
-        print(f"[MCP-SERVER] SSE disconnected from {client_addr}", flush=True)
+        logger.info(f"SSE disconnected from {client_addr}")
 
     # Return empty response to avoid NoneType error (per MCP docs)
     # Add cache headers: 10 seconds for market data (5-10s range)
