@@ -6,7 +6,7 @@ MCP server for Yahoo Finance market data.
 
 ```bash
 make all        # lint + test (before committing)
-make server     # Start HTTP server (port 5001)
+make server     # Start HTTP server (port 5011 dev, 5001 prod)
 make logs       # Tail logs
 
 ./cli ticker TSLA              # Test single
@@ -93,7 +93,7 @@ make test       # run tests
 make lint-fix   # auto-fix issues
 
 # Server management
-make server     # Start server (HTTP port 5001)
+make server     # Start server (HTTP port 5011 dev, 5001 prod)
 make logs       # Tail logs (logs/server.log)
 ```
 

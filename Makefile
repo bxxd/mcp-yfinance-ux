@@ -5,7 +5,8 @@
 export
 
 # Default configuration (fallback if .env not present)
-PORT ?= 5001
+# Dev port: 5011, Prod port: 5001
+PORT ?= 5011
 
 # Default target - show help
 help:
