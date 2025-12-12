@@ -101,6 +101,13 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
             lines.append(line)
     lines.append("")
 
+    # COMMODITIES
+    lines.append("COMMODITIES                   PRICE     CHANGE       1M         1Y")
+    for key in ["gold", "silver", "copper", "oil_wti", "natgas"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
     # CRYPTO
     lines.append("CRYPTO                        PRICE     CHANGE       1M         1Y")
     for key in ["btc", "eth", "sol"]:
@@ -131,13 +138,6 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
     lines.append("PRIVATE CREDIT   TICKER      PRICE     CHANGE       1M         1Y")
     if line := format_line("private_credit", show_ticker=True):
         lines.append(line)
-    lines.append("")
-
-    # COMMODITIES
-    lines.append("COMMODITIES                   PRICE     CHANGE       1M         1Y")
-    for key in ["gold", "oil_wti", "natgas"]:
-        if line := format_line(key):
-            lines.append(line)
     lines.append("")
 
     # VOLATILITY & RATES
