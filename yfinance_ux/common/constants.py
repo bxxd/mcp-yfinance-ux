@@ -28,7 +28,7 @@ CATEGORY_MAPPING: dict[str, list[str]] = {
     "us": ["sp500", "nasdaq", "dow", "russell2000"],
     "futures": ["es_futures", "nq_futures", "ym_futures"],
     "volatility": ["vix"],
-    "commodities": ["gold", "oil_wti", "natgas"],
+    "commodities": ["gold", "silver", "copper", "oil_wti", "natgas"],
     "rates": ["us10y"],
     "crypto": ["btc", "eth", "sol"],
     "europe": ["stoxx50", "dax", "ftse", "cac40"],
@@ -98,6 +98,7 @@ MARKET_SYMBOLS = {
     # Commodities
     "gold": "GC=F",
     "silver": "SI=F",
+    "copper": "HG=F",
     "oil_wti": "CL=F",
     "oil_brent": "BZ=F",
     "natgas": "NG=F",
@@ -148,7 +149,7 @@ FORMATTING_SECTIONS: dict[str, list[str]] = {
     "MARKET": ["sp500", "nasdaq", "dow", "russell2000"],  # During market hours
     "MARKET FUTURES": ["es_futures", "nq_futures", "ym_futures"],  # After hours
     "VOLATILITY": ["vix"],
-    "COMMODITIES": ["gold", "oil_wti", "natgas"],
+    "COMMODITIES": ["gold", "silver", "copper", "oil_wti", "natgas"],
     "RATES": ["us10y"],
     "SECTORS": [
         "tech", "financials", "healthcare", "energy", "consumer_disc",
@@ -172,7 +173,7 @@ SECTION_REGION_MAP: dict[str, str] = {
 # Friendly display names
 DISPLAY_NAMES: dict[str, str] = {
     "es_futures": "S&P 500", "nq_futures": "Nasdaq", "ym_futures": "Dow",
-    "gold": "Gold", "btc": "Bitcoin", "vix": "VIX",
+    "gold": "Gold", "silver": "Silver", "copper": "Copper", "btc": "Bitcoin", "vix": "VIX",
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",

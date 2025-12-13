@@ -203,6 +203,8 @@ def get_markets_data() -> dict[str, dict[str, Any]]:
         ("private_credit", "BIZD"),
         # Commodities
         ("gold", "GC=F"),
+        ("silver", "SI=F"),
+        ("copper", "HG=F"),
         ("oil_wti", "CL=F"),
         ("natgas", "NG=F"),
         # Volatility & Rates
