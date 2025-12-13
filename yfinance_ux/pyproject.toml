@@ -1,0 +1,17 @@
+[project]
+name = "yfinance-ux"
+version = "0.1.0"
+description = "Yahoo Finance data utilities - pure library for fetching and processing market data"
+requires-python = ">=3.10"
+dependencies = [
+    "yfinance>=0.2.48",
+    "pandas>=2.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["yfinance_ux", "yfinance_ux.*"]
