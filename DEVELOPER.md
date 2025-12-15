@@ -22,9 +22,11 @@ Two packages:
 
 Key files:
 - `yfinance_ux/fetcher.py` - Historical data (individual `yf.Ticker().history()`)
-- `mcp_yfinance_ux/market_data.py` - Business logic
+- `mcp_yfinance_ux/market_data.py` - Business logic (data fetching + formatting)
+- `mcp_yfinance_ux/handlers.py` - Tool routing (single source of truth for call_tool)
 - `mcp_yfinance_ux/tools.py` - MCP tool definitions
-- `mcp_yfinance_ux/server_http.py` - HTTP/SSE transport
+- `mcp_yfinance_ux/server.py` - stdio transport (Claude Code direct)
+- `mcp_yfinance_ux/server_http.py` - HTTP/SSE transport (multi-tenant)
 
 ## Tools
 
@@ -42,11 +44,32 @@ Output: BBG Lite format (dense, scannable text)
 
 ## Core Principles
 
+### Hexagonal Architecture
+```
+             ┌─────────────┐
+             │   cli.py    │  CLI entry point
+             └──────┬──────┘
+                    │
+             ┌──────▼──────┐
+┌────────┐   │ handlers.py │   ┌──────────────┐
+│server.py│──►│  call_tool  │◄──│server_http.py│
+│ (stdio) │   │ (routing)   │   │  (HTTP/SSE)  │
+└────────┘   └──────┬──────┘   └──────────────┘
+                    │
+             ┌──────▼──────┐
+             │market_data.py│  Business logic
+             └──────┬──────┘
+                    │
+             ┌──────▼──────┐
+             │ yfinance_ux │  Pure data library
+             └─────────────┘
+```
+
 ### Separation of Concerns
 Business logic (market_data.py) has zero MCP dependencies. Protocol layer is just routing.
 
 ### Single Source of Truth
-Import, don't duplicate. Data fetching in yfinance_ux, tool definitions in tools.py.
+Import, don't duplicate. Tool routing in handlers.py, data fetching in yfinance_ux, tool definitions in tools.py.
 
 ### UI Not API
 Screen-based tools match Bloomberg Terminal flow (markets → sector → ticker), not REST endpoints.
@@ -65,15 +88,17 @@ Zero mypy/ruff warnings. Catch errors at dev time.
 
 ```
 mcp-yfinance-ux/
-├── yfinance_ux/              # Pure library
+├── yfinance_ux/              # Pure library (no MCP deps)
 │   ├── fetcher.py            # Historical data
 │   ├── common/               # Symbols, dates, constants
 │   ├── calculations/         # Momentum, volatility, RSI
 │   └── services/             # Market data, tickers, sectors, options
 ├── mcp_yfinance_ux/          # MCP server
-│   ├── server_http.py        # HTTP/SSE transport
-│   ├── market_data.py        # Business logic
+│   ├── handlers.py           # Tool routing (single source of truth)
+│   ├── market_data.py        # Business logic (fetch + format)
 │   ├── tools.py              # MCP tool definitions
+│   ├── server.py             # stdio transport
+│   ├── server_http.py        # HTTP/SSE transport
 │   ├── cli.py                # CLI for testing
 │   └── formatters/           # BBG Lite output
 ├── tests/                    # Tests
