@@ -15,7 +15,7 @@ Configuration:
 import logging
 import os
 import signal
-from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -27,42 +27,33 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from .handlers import call_tool as handle_tool
+from .logging_config import get_logger, setup_async_logging
 from .tools import get_mcp_tools
 
-# Configure logging with millisecond precision
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%Y/%m/%d %H:%M:%S:%f"
-)
-
-
-# Custom formatter to get milliseconds in the right format
-class MillisecondFormatter(logging.Formatter):
-    """Custom formatter with milliseconds as :XXXX format"""
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802
-        """Override formatTime to include milliseconds with : separator"""
-        ct = datetime.fromtimestamp(record.created, tz=timezone.utc)
-        if datefmt:
-            # Format without milliseconds first
-            s = ct.strftime("%Y/%m/%d %H:%M:%S")
-            # Add milliseconds with : separator
-            ms = int((record.created % 1) * 10000)  # Get 4 digits of precision
-            return f"{s}:{ms:04d}"
-        return super().formatTime(record, datefmt)
-
-
-# Apply custom formatter to root logger
-for handler in logging.root.handlers:
-    handler.setFormatter(MillisecondFormatter(
-        "[%(asctime)s] [%(levelname)s] %(message)s",
-        datefmt="%Y/%m/%d %H:%M:%S"
-    ))
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Configuration
 DEFAULT_PORT = 5001
+
+
+def get_log_level() -> int:
+    """Get log level from environment or use default (INFO)"""
+    level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    return level_map.get(level_str, logging.INFO)
+
+
+# Setup async logging with level from .env
+setup_async_logging(
+    log_file=Path("logs/server.log"),
+    level=get_log_level()
+)
 
 
 def get_port() -> int:

@@ -83,6 +83,104 @@ Zero mypy/ruff warnings. Catch errors at dev time.
 - Narrow window momentum (22 days vs 252 days)
 - Parallel fetching (ThreadPoolExecutor)
 - Batch API (`yf.Tickers()`)
+- **Market-aware caching** (skip API calls for closed markets)
+
+## Caching (Design Decision)
+
+**markets() uses intelligent caching to reduce API calls without stale data.**
+
+### Why Cache?
+
+After US market close (4pm ET):
+- **Session markets** (US equities, global indices, ETFs) → prices frozen until next open
+- **24-hour markets** (crypto, futures) → prices continuously updating
+
+Without caching, we'd make 50+ API calls to yfinance for markets() even when most data is stale.
+
+### Caching Strategy
+
+**Session markets** (cache until next market open ~9:30am ET):
+- US Equities: ^GSPC, ^IXIC, ^DJI, ^RUT
+- Global indices: ^N225, ^HSI, ^STOXX50E, etc.
+- Sector/Style ETFs: XLK, XLF, MTUM, VTV, etc.
+- Rationale: Prices won't change until market reopens
+
+**24-hour markets** (cache for 2 minutes):
+- Crypto: BTC-USD, ETH-USD, SOL-USD
+- Commodities futures: GC=F, CL=F, NG=F, etc.
+- US Futures: ES=F, NQ=F, YM=F
+- Rationale: Prices change 24/7, need fresh data
+
+**VIX & Rates** (cache until next open):
+- ^VIX, ^TNX
+- Derivatives of session markets, won't change after hours
+
+### Implementation
+
+**Location**: `mcp_yfinance_ux/cache.py` (MCP layer, not pure library)
+
+**How it works**:
+1. Before fetching symbol data, check in-memory cache
+2. If cached and not expired, return cached data (skip API call)
+3. If cache miss, fetch from yfinance and cache with market-aware TTL
+4. Cache expires based on symbol type (2 min for 24-hour, next open for session)
+
+**API call savings** (after hours):
+- Without cache: ~50 API calls per markets() request
+- With cache: ~10 API calls (only 24-hour markets + cache misses)
+- Savings: ~80% reduction in API calls during off-hours
+
+### Trade-offs
+
+**Pros**:
+- Massive API call reduction during off-hours
+- Faster response time (no network latency for cached data)
+- Reduced rate limit pressure on yfinance
+- Zero staleness risk (session markets literally can't change)
+
+**Cons**:
+- Memory usage (minimal - ~50 symbols × ~500 bytes = 25KB)
+- Complexity (60 lines of cache logic)
+
+**Decision**: Benefits far outweigh costs. yfinance is an unofficial scraper with rate limits. Caching is essential for production use.
+
+## RVOL Time Windows (Design Decision)
+
+**markets() uses 10-day average, ticker() uses 3-month average - this is intentional!**
+
+### Why Different Time Windows?
+
+**markets() - 10-day average (fast_info.tenDayAverageVolume):**
+- **Rationale**: FREE - already fetching fast_info for price data, no extra API call
+- **Purpose**: Quick market scan to spot recent momentum shifts
+- **Use case**: "What's heating up in the last 2 weeks?"
+- **Trade-off**: More sensitive to recent quiet/hot periods
+
+**ticker() - 3-month average (info.averageVolume):**
+- **Rationale**: FREE - already fetching info for P/E, market cap, earnings, etc.
+- **Purpose**: Detailed analysis with stable baseline to filter noise
+- **Use case**: "What's normal volume for this stock?"
+- **Trade-off**: Less sensitive to recent shifts, more reliable context
+
+### Example: Why This Matters
+
+XLK on a quiet week (Dec 17, 2025):
+- **markets() shows 1.5x RVOL** - "Hot vs recent 2-week trend" (last 10 days were unusually quiet)
+- **ticker() shows 0.8x RVOL** - "Below normal vs 3-month baseline" (actually lower than usual)
+
+Both are correct! They answer different questions:
+- markets() = "Is this moving NOW?"
+- ticker() = "Is this unusual for THIS stock?"
+
+### API Cost
+
+Switching to same time window would require:
+- **Extra API call** per symbol (either info or history)
+- **Higher latency** (additional network round trip)
+- **Rate limit pressure** (yfinance caps requests)
+- **No benefit** (different tools serve different purposes)
+
+Current approach: **0 extra API calls** - both averages come free with existing data fetches.
 
 ## File Structure
 
