@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import yfinance as yf  # type: ignore[import-untyped]
 
 from yfinance_ux.calculations.momentum import calculate_momentum
+from yfinance_ux.calculations.volume import calculate_relative_volume
 from yfinance_ux.common.constants import CATEGORY_MAPPING, MARKET_SYMBOLS
 from yfinance_ux.common.dates import is_market_open
 
@@ -88,27 +89,11 @@ def get_ticker_full_data(symbol: str) -> dict[str, Any]:
                 change_pct = ((price - prev_close) / prev_close) * 100
 
         # Volume analytics - extrapolate today's partial volume during market hours
-        rel_volume = None
-        if volume_today is not None and avg_volume is not None and avg_volume > 0:
-            # During market hours: extrapolate partial volume to full day
-            if is_market_open() and not is_futures:
-                now = datetime.now(ZoneInfo("America/New_York"))
-                market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-                market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-                if now > market_open:
-                    elapsed = (now - market_open).total_seconds()
-                    total_seconds = (market_close - market_open).total_seconds()
-                    fraction = min(elapsed / total_seconds, 1.0)
-
-                    # Extrapolate if we're at least 10% into the day
-                    if fraction > 0.1:
-                        extrapolated_volume = volume_today / fraction
-                        rel_volume = extrapolated_volume / avg_volume
-            else:
-                # After hours or futures: use today's volume as-is
-                # (For futures, volume accumulates 24/7, so comparison is rough)
-                rel_volume = volume_today / avg_volume
+        # For futures, skip extrapolation (24/7 trading, volume accumulates continuously)
+        if is_futures:
+            rel_volume = volume_today / avg_volume if (volume_today and avg_volume and avg_volume > 0) else None
+        else:
+            rel_volume = calculate_relative_volume(volume_today, avg_volume)
 
         # Get momentum (already optimized with narrow windows)
         momentum = calculate_momentum(symbol)

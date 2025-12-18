@@ -14,8 +14,8 @@ import yfinance as yf  # type: ignore[import-untyped]
 from yfinance_ux.calculations.momentum import calculate_momentum
 from yfinance_ux.calculations.technical import calculate_rsi
 from yfinance_ux.calculations.volatility import calculate_idio_vol
+from yfinance_ux.calculations.volume import calculate_relative_volume
 from yfinance_ux.common.constants import RSI_PERIOD
-from yfinance_ux.common.dates import is_market_open
 from yfinance_ux.common.symbols import normalize_ticker_symbol
 from yfinance_ux.services.options import get_options_data
 
@@ -46,33 +46,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         name = info.get("longName") or info.get("shortName") or symbol
 
         # Volume analytics - extrapolate intraday volume
-        # During market hours, raw volume is partial (e.g., 2hrs into 6.5hr day).
-        # Comparing 20M shares at 11am to 80M average is misleading (0.25x).
-        # Extrapolate to full day: 20M / (2/6.5) = 65M → 0.81x (more accurate).
-        rel_volume = None
-        if volume is not None and avg_volume is not None and avg_volume > 0:
-            # During market hours: extrapolate partial volume to full day
-            if is_market_open():
-                now = datetime.now(ZoneInfo("America/New_York"))
-                market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-                market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-                if now > market_open:
-                    elapsed = (now - market_open).total_seconds()
-                    total_seconds = (market_close - market_open).total_seconds()
-                    fraction = min(elapsed / total_seconds, 1.0)
-
-                    # Extrapolate if we're at least 10% into the day
-                    if fraction > 0.1:
-                        extrapolated_volume = volume / fraction
-                        rel_volume = extrapolated_volume / avg_volume
-                    else:
-                        rel_volume = volume / avg_volume
-                else:
-                    rel_volume = volume / avg_volume
-            else:
-                # After hours: use today's volume as-is
-                rel_volume = volume / avg_volume
+        rel_volume = calculate_relative_volume(volume, avg_volume)
 
         # Factor exposures
         beta_spx = info.get("beta")
@@ -245,33 +219,7 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
             name = info.get("longName") or info.get("shortName") or symbol
 
             # Volume analytics - extrapolate intraday volume
-            # During market hours, raw volume is partial (e.g., 2hrs into 6.5hr day).
-            # Comparing 20M shares at 11am to 80M average is misleading (0.25x).
-            # Extrapolate to full day: 20M / (2/6.5) = 65M → 0.81x (more accurate).
-            rel_volume = None
-            if volume is not None and avg_volume is not None and avg_volume > 0:
-                # During market hours: extrapolate partial volume to full day
-                if is_market_open():
-                    now = datetime.now(ZoneInfo("America/New_York"))
-                    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-                    market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-
-                    if now > market_open:
-                        elapsed = (now - market_open).total_seconds()
-                        total_seconds = (market_close - market_open).total_seconds()
-                        fraction = min(elapsed / total_seconds, 1.0)
-
-                        # Extrapolate if we're at least 10% into the day
-                        if fraction > 0.1:
-                            extrapolated_volume = volume / fraction
-                            rel_volume = extrapolated_volume / avg_volume
-                        else:
-                            rel_volume = volume / avg_volume
-                    else:
-                        rel_volume = volume / avg_volume
-                else:
-                    # After hours: use today's volume as-is
-                    rel_volume = volume / avg_volume
+            rel_volume = calculate_relative_volume(volume, avg_volume)
 
             # Factor exposures
             beta_spx = info.get("beta")

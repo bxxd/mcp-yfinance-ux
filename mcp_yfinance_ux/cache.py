@@ -68,8 +68,15 @@ def get_cache_expiry(symbol: str) -> datetime:
     if is_24_hour_market(symbol):
         # Crypto: 2 minute cache
         return now + timedelta(seconds=CRYPTO_TTL_SECONDS)
-    # Session markets: cache until next market open
-    return get_next_market_open()
+
+    # Session markets: SHORT TTL when open, cache until next open when closed
+    from yfinance_ux.common.dates import is_market_open
+    if is_market_open():
+        # Market open: 2 minute cache for live updates during trading hours
+        return now + timedelta(seconds=120)
+    else:
+        # Market closed: cache until next open (prices won't change)
+        return get_next_market_open()
 
 
 def get_cached_data(symbol: str) -> dict[str, Any] | None:

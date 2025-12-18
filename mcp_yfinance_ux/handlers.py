@@ -69,14 +69,17 @@ def handle_ticker(arguments: dict[str, Any]) -> str:
 
     symbols = normalize_symbols(symbol)
 
+    if not symbols:
+        msg = "ticker() symbol normalization produced no valid symbols"
+        raise ValueError(msg)
+
     if len(symbols) > 1:
         # Batch comparison mode
         data_list = get_ticker_screen_data_batch(symbols)
         return format_ticker_batch(data_list)
 
     # Single ticker mode
-    single_symbol = symbols[0] if symbols else symbol
-    data = get_ticker_screen_data(single_symbol)
+    data = get_ticker_screen_data(symbols[0])
     return format_ticker(data)
 
 

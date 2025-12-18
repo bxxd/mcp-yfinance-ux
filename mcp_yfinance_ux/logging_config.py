@@ -72,8 +72,14 @@ class AsyncLoggingManager:
             logging.getLogger("mcp.server.sse").setLevel(logging.INFO)
 
     def shutdown(self) -> None:
-        """Shut down async logging (call on application exit)"""
+        """Shut down async logging (call on application exit)
+
+        Ensures all queued log records are processed before stopping.
+        """
         if self.listener is not None:
+            # QueueListener.stop() waits for queue to be processed,
+            # but we ensure the queue is empty first for extra safety
+            self.log_queue.join()  # Wait for all tasks to be processed
             self.listener.stop()
             self.listener = None
 
