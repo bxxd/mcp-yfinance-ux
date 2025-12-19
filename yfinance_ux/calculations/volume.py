@@ -1,6 +1,6 @@
 """Volume analytics calculations."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from yfinance_ux.common.dates import is_market_open
@@ -49,4 +49,44 @@ def calculate_relative_volume(volume: float | None, avg_volume: float | None) ->
             return volume / avg_volume
     else:
         # Pre-market or after-hours: use raw volume (no extrapolation)
+        return volume / avg_volume
+
+
+def calculate_relative_volume_futures(volume: float | None, avg_volume: float | None) -> float | None:
+    """Calculate relative volume for futures with 24-hour extrapolation.
+
+    Futures reset at 6pm ET settlement and trade 24/7. Volume accumulates over 24h cycle.
+    Comparing partial volume at 8pm (2h into cycle) to 24h average is misleading (8%).
+    Extrapolate to full 24h: volume / (2/24) = 12x current → compare to average.
+
+    Args:
+        volume: Current volume since last settlement
+        avg_volume: Average 24-hour volume
+
+    Returns:
+        Relative volume (extrapolated to 24h), or None if inputs invalid
+    """
+    if volume is None or avg_volume is None or avg_volume <= 0:
+        return None
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+
+    # Futures settlement is 6pm ET
+    last_settlement = now.replace(hour=18, minute=0, second=0, microsecond=0)
+
+    # If we're before 6pm today, settlement was yesterday at 6pm
+    if now < last_settlement:
+        last_settlement = last_settlement - timedelta(days=1)
+
+    # Calculate hours since settlement
+    elapsed = (now - last_settlement).total_seconds()
+    total_seconds = 24 * 60 * 60  # 24 hours
+    fraction = min(elapsed / total_seconds, 1.0)
+
+    # Extrapolate if we're at least 5% into the 24h cycle (avoids inflated RVOL at 6:01 PM)
+    if fraction > 0.05:
+        extrapolated_volume = volume / fraction
+        return extrapolated_volume / avg_volume
+    else:
+        # Very early in cycle: use raw volume
         return volume / avg_volume

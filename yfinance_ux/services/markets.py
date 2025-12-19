@@ -14,7 +14,10 @@ from zoneinfo import ZoneInfo
 import yfinance as yf  # type: ignore[import-untyped]
 
 from yfinance_ux.calculations.momentum import calculate_momentum
-from yfinance_ux.calculations.volume import calculate_relative_volume
+from yfinance_ux.calculations.volume import (
+    calculate_relative_volume,
+    calculate_relative_volume_futures,
+)
 from yfinance_ux.common.constants import CATEGORY_MAPPING, MARKET_SYMBOLS
 from yfinance_ux.common.dates import is_market_open
 
@@ -88,10 +91,11 @@ def get_ticker_full_data(symbol: str) -> dict[str, Any]:
             if price is not None and prev_close is not None and prev_close != 0:
                 change_pct = ((price - prev_close) / prev_close) * 100
 
-        # Volume analytics - extrapolate today's partial volume during market hours
-        # For futures, skip extrapolation (24/7 trading, volume accumulates continuously)
+        # Volume analytics - extrapolate partial volume
+        # Futures: extrapolate over 24h cycle (resets at 6pm settlement)
+        # Session markets: extrapolate over 6.5h trading day (9:30am-4pm)
         if is_futures:
-            rel_volume = volume_today / avg_volume if (volume_today and avg_volume and avg_volume > 0) else None
+            rel_volume = calculate_relative_volume_futures(volume_today, avg_volume)
         else:
             rel_volume = calculate_relative_volume(volume_today, avg_volume)
 
