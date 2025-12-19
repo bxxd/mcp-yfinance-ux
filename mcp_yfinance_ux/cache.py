@@ -5,6 +5,8 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from mcp_yfinance_ux.logging_config import get_logger
+from yfinance_ux.common.constants import SATURDAY
+from yfinance_ux.common.dates import is_market_open
 
 logger = get_logger(__name__)
 
@@ -24,9 +26,6 @@ _cache: dict[str, dict[str, Any]] = {}
 # TTL for 24-hour markets (in seconds)
 CRYPTO_TTL_SECONDS = 120  # 2 minutes for crypto
 FUTURES_TTL_SECONDS = 30  # 30 seconds for futures (more active)
-
-# Weekend detection (weekday() returns 5=Saturday, 6=Sunday)
-SATURDAY = 5
 
 # Futures symbols (subset of 24-hour markets, need shorter cache)
 FUTURES_SYMBOLS = {
@@ -70,13 +69,11 @@ def get_cache_expiry(symbol: str) -> datetime:
         return now + timedelta(seconds=CRYPTO_TTL_SECONDS)
 
     # Session markets: SHORT TTL when open, cache until next open when closed
-    from yfinance_ux.common.dates import is_market_open
     if is_market_open():
         # Market open: 2 minute cache for live updates during trading hours
         return now + timedelta(seconds=120)
-    else:
-        # Market closed: cache until next open (prices won't change)
-        return get_next_market_open()
+    # Market closed: cache until next open (prices won't change)
+    return get_next_market_open()
 
 
 def get_cached_data(symbol: str) -> dict[str, Any] | None:
