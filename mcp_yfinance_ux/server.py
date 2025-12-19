@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-yfinance MCP Server - MCP protocol wrapper
+yfinance MCP Server - stdio transport
 
-UI-based screens (not API endpoints):
-- markets() - Market overview with all factors
-- sector(name) - Sector drill-down
-- ticker(symbol) - Individual security
+MCP protocol wrapper for Claude Code (stdio mode).
+Business logic delegated to handlers.py.
 
-Core business logic in market_data.py (testable independently)
-This file handles MCP protocol layer only
+Run with: poetry run python -m mcp_yfinance_ux.server
 """
 
 import asyncio
@@ -18,18 +15,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from .market_data import (
-    format_markets,
-    format_options,
-    format_sector,
-    format_ticker,
-    format_ticker_batch,
-    get_markets_data,
-    get_options_data,
-    get_sector_data,
-    get_ticker_screen_data,
-    get_ticker_screen_data_batch,
-)
+from .handlers import call_tool as handle_tool
 from .tools import get_mcp_tools
 
 app = Server("yfinance-mcp")
@@ -41,55 +27,11 @@ async def list_tools() -> list[Tool]:
     return get_mcp_tools()
 
 
-
-
 @app.call_tool()  # type: ignore[misc]
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: ANN401
-    """Handle tool execution - thin wrapper around core business logic"""
-    if name == "markets":
-        data = get_markets_data()
-        formatted = format_markets(data)
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "sector":
-        sector_name = arguments.get("name")
-        if not sector_name:
-            msg = "sector() requires 'name' parameter"
-            raise ValueError(msg)
-        data = get_sector_data(sector_name)
-        formatted = format_sector(data)
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "ticker":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "ticker() requires 'symbol' parameter"
-            raise ValueError(msg)
-
-        # Check if batch mode (list) or single mode (string)
-        if isinstance(symbol, list):
-            # Batch comparison mode - use batch API to avoid hammering Yahoo
-            data_list = get_ticker_screen_data_batch(symbol)
-            formatted = format_ticker_batch(data_list)
-            return [TextContent(type="text", text=formatted)]
-
-        # Single ticker mode
-        data = get_ticker_screen_data(symbol)
-        formatted = format_ticker(data)
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "ticker_options":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "ticker_options() requires 'symbol' parameter"
-            raise ValueError(msg)
-        expiration = arguments.get("expiration", "nearest")
-        data = get_options_data(symbol, expiration)
-        formatted = format_options(data)
-        return [TextContent(type="text", text=formatted)]
-
-    msg = f"Unknown tool: {name}"
-    raise ValueError(msg)
+    """Handle tool execution - delegates to handlers.py"""
+    result = handle_tool(name, arguments or {})
+    return [TextContent(type="text", text=result)]
 
 
 async def main() -> None:

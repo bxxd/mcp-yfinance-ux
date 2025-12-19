@@ -4,6 +4,7 @@ yfinance MCP Server - HTTP/SSE transport
 
 Network server for multi-tenant Claude Code access.
 Same MCP protocol as stdio server, different transport.
+Business logic delegated to handlers.py.
 
 Run with: make server
 
@@ -14,7 +15,7 @@ Configuration:
 import logging
 import os
 import signal
-from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -25,52 +26,34 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
-from .market_data import (
-    format_markets,
-    format_options,
-    format_sector,
-    format_ticker,
-    format_ticker_batch,
-    get_markets_data,
-    get_options_data,
-    get_sector_data,
-    get_ticker_screen_data,
-    get_ticker_screen_data_batch,
-)
+from .handlers import call_tool as handle_tool
+from .logging_config import get_logger, setup_async_logging
 from .tools import get_mcp_tools
 
-# Configure logging with millisecond precision
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%Y/%m/%d %H:%M:%S:%f"
-)
-
-# Custom formatter to get milliseconds in the right format
-class MillisecondFormatter(logging.Formatter):
-    """Custom formatter with milliseconds as :XXXX format"""
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802
-        """Override formatTime to include milliseconds with : separator"""
-        ct = datetime.fromtimestamp(record.created, tz=timezone.utc)
-        if datefmt:
-            # Format without milliseconds first
-            s = ct.strftime("%Y/%m/%d %H:%M:%S")
-            # Add milliseconds with : separator
-            ms = int((record.created % 1) * 10000)  # Get 4 digits of precision
-            return f"{s}:{ms:04d}"
-        return super().formatTime(record, datefmt)
-
-# Apply custom formatter to root logger
-for handler in logging.root.handlers:
-    handler.setFormatter(MillisecondFormatter(
-        "[%(asctime)s] [%(levelname)s] %(message)s",
-        datefmt="%Y/%m/%d %H:%M:%S"
-    ))
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Configuration
 DEFAULT_PORT = 5001
+
+
+def get_log_level() -> int:
+    """Get log level from environment or use default (INFO)"""
+    level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+    return level_map.get(level_str, logging.INFO)
+
+
+# Setup async logging with level from .env
+setup_async_logging(
+    log_file=Path("logs/server.log"),
+    level=get_log_level()
+)
 
 
 def get_port() -> int:
@@ -96,62 +79,13 @@ async def list_tools() -> list[Tool]:
     return get_mcp_tools()
 
 
-
-
 @mcp_server.call_tool()  # type: ignore[misc]
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: ANN401
-    """Handle tool execution - thin wrapper around core business logic"""
+    """Handle tool execution - delegates to handlers.py"""
     logger.info(f"call_tool: name={name}, arguments={arguments}")
-
-    if name == "markets":
-        data = get_markets_data()
-        formatted = format_markets(data)
-        logger.info(f"markets() returning {len(formatted)} chars")
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "sector":
-        sector_name = arguments.get("name")
-        if not sector_name:
-            msg = "sector() requires 'name' parameter"
-            raise ValueError(msg)
-        data = get_sector_data(sector_name)
-        formatted = format_sector(data)
-        logger.info(f"sector({sector_name}) returning {len(formatted)} chars")
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "ticker":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "ticker() requires 'symbol' parameter"
-            raise ValueError(msg)
-
-        # Check if batch mode (list) or single mode (string)
-        if isinstance(symbol, list):
-            # Batch comparison mode - use batch API to avoid hammering Yahoo
-            data_list = get_ticker_screen_data_batch(symbol)
-            formatted = format_ticker_batch(data_list)
-            logger.info(f"ticker({symbol}) batch returning {len(formatted)} chars")
-            return [TextContent(type="text", text=formatted)]
-
-        # Single ticker mode
-        data = get_ticker_screen_data(symbol)
-        formatted = format_ticker(data)
-        logger.info(f"ticker({symbol}) returning {len(formatted)} chars")
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "ticker_options":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "ticker_options() requires 'symbol' parameter"
-            raise ValueError(msg)
-        expiration = arguments.get("expiration", "nearest")
-        data = get_options_data(symbol, expiration)
-        formatted = format_options(data)
-        logger.info(f"ticker_options({symbol}, {expiration}) returning {len(formatted)} chars")
-        return [TextContent(type="text", text=formatted)]
-
-    msg = f"Unknown tool: {name}"
-    raise ValueError(msg)
+    result = handle_tool(name, arguments or {})
+    logger.info(f"{name}() returning {len(result)} chars")
+    return [TextContent(type="text", text=result)]
 
 
 # Starlette endpoint handlers

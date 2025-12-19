@@ -21,6 +21,8 @@ BETA_HIGH_THRESHOLD = 1.2
 BETA_LOW_THRESHOLD = 0.8
 IDIO_VOL_HIGH_THRESHOLD = 30
 IDIO_VOL_LOW_THRESHOLD = 15
+UNUSUAL_VOLUME_THRESHOLD = 2.0  # Relative volume threshold for unusual activity flag
+MAX_REASONABLE_RVOL = 100  # Cap for displaying relative volume (filter corrupted data)
 
 # Category to symbol mappings (for get_market_snapshot)
 # Aligned with Paleologo factor framework
@@ -98,6 +100,7 @@ MARKET_SYMBOLS = {
     # Commodities
     "gold": "GC=F",
     "silver": "SI=F",
+    "platinum": "PL=F",
     "copper": "HG=F",
     "oil_wti": "CL=F",
     "oil_brent": "BZ=F",
@@ -173,7 +176,7 @@ SECTION_REGION_MAP: dict[str, str] = {
 # Friendly display names
 DISPLAY_NAMES: dict[str, str] = {
     "es_futures": "S&P 500", "nq_futures": "Nasdaq", "ym_futures": "Dow",
-    "gold": "Gold", "silver": "Silver", "copper": "Copper", "btc": "Bitcoin", "vix": "VIX",
+    "gold": "Gold", "silver": "Silver", "platinum": "Platinum", "copper": "Copper", "btc": "Bitcoin", "vix": "VIX",
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",

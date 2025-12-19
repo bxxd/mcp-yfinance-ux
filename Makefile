@@ -30,6 +30,8 @@ help:
 test:
 	@echo "Running tests..."
 	@poetry run python tests/test_core.py
+	@echo ""
+	@poetry run python tests/test_handlers.py
 
 # Run type checking only
 mypy:

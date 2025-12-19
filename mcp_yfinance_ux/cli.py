@@ -8,10 +8,11 @@ Usage:
   ./cli sector technology    # Sector drill-down screen
   ./cli ticker TSLA          # Individual ticker screen (detailed)
   ./cli ticker TSLA F GM     # Batch comparison (table format)
+  ./cli ticker TSLA,F,GM     # Batch comparison (comma-separated)
   ./cli options PALL         # Options chain analysis (nearest expiration)
   ./cli options PALL 2025-12-20  # Options for specific expiration
 
-Fast iteration: Calls market_data.py functions directly (no MCP layer)
+Fast iteration: Calls handlers.py directly (no MCP transport layer)
 """
 
 import argparse
@@ -19,24 +20,13 @@ import asyncio
 import json
 import sys
 
-from .market_data import (
-    format_markets,
-    format_options,
-    format_sector,
-    format_ticker,
-    format_ticker_batch,
-    get_markets_data,
-    get_options_data,
-    get_sector_data,
-    get_ticker_screen_data,
-    get_ticker_screen_data_batch,
-)
-from .server import list_tools
+from .handlers import call_tool
+from .tools import get_mcp_tools
 
 
 async def list_tools_command() -> int:
     """Show MCP tool definitions"""
-    tools = await list_tools()
+    tools = get_mcp_tools()
 
     print("=" * 80)
     print("MCP TOOL DEFINITIONS")
@@ -45,7 +35,7 @@ async def list_tools_command() -> int:
 
     for tool in tools:
         print(f"Tool: {tool.name}")
-        print(f"Claude sees: mcp__idio-yf__{tool.name}")
+        print(f"Claude sees: mcp__yfinance-ux__{tool.name}")
         print()
         print("Description:")
         print(tool.description)
@@ -59,39 +49,30 @@ async def list_tools_command() -> int:
 
 def markets_command() -> int:
     """Show markets() screen"""
-    data = get_markets_data()
-    output = format_markets(data)
+    output = call_tool("markets", {})
     print(output)
     return 0
 
 
 def sector_command(name: str) -> int:
     """Show sector() screen"""
-    data = get_sector_data(name)
-    output = format_sector(data)
+    output = call_tool("sector", {"name": name})
     print(output)
     return 0
 
 
 def ticker_command(symbols: list[str]) -> int:
     """Show ticker() screen - single or batch mode"""
-    if len(symbols) == 1:
-        # Single ticker mode
-        data = get_ticker_screen_data(symbols[0])
-        output = format_ticker(data)
-        print(output)
-    else:
-        # Batch comparison mode - use batch API (same as MCP server)
-        data_list = get_ticker_screen_data_batch(symbols)
-        output = format_ticker_batch(data_list)
-        print(output)
+    # Join all args - handlers.py normalize_symbols handles the parsing
+    symbol_input = ",".join(symbols) if len(symbols) > 1 else symbols[0]
+    output = call_tool("ticker", {"symbol": symbol_input})
+    print(output)
     return 0
 
 
 def options_command(symbol: str, expiration: str = "nearest") -> int:
     """Show options() screen"""
-    data = get_options_data(symbol, expiration)
-    output = format_options(data)
+    output = call_tool("ticker_options", {"symbol": symbol, "expiration": expiration})
     print(output)
     return 0
 
@@ -108,6 +89,7 @@ Examples:
   %(prog)s sector technology
   %(prog)s ticker TSLA                # Single ticker (detailed)
   %(prog)s ticker TSLA F GM           # Batch comparison (table)
+  %(prog)s ticker TSLA,F,GM           # Batch comparison (comma-separated)
   %(prog)s options PALL               # Options analysis (nearest expiration)
   %(prog)s options PALL 2025-12-20    # Options for specific expiration
         """

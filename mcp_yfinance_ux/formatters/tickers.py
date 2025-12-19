@@ -16,6 +16,7 @@ from yfinance_ux.common.constants import (
     IDIO_VOL_LOW_THRESHOLD,
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
+    UNUSUAL_VOLUME_THRESHOLD,
 )
 
 
@@ -110,6 +111,8 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     change_pct = data.get("change_percent")
     market_cap = data.get("market_cap")
     volume = data.get("volume")
+    rel_volume = data.get("rel_volume")
+    vol_momentum_1w = data.get("vol_momentum_1w")
 
     now = datetime.now(ZoneInfo("America/New_York"))
     date_str = now.strftime("%Y-%m-%d")
@@ -129,14 +132,37 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         )
     lines.append("")
 
-    # Company name + Market cap/Volume
-    if market_cap is not None and volume is not None:
-        # Format market cap (billions)
+    # Company name + Market cap
+    if market_cap is not None:
         market_cap_b = market_cap / 1e9
-        volume_m = volume / 1e6
-        lines.append(f"{name[:40]:40} MKT CAP  {market_cap_b:6.1f}B    VOLUME {volume_m:5.1f}M")
+        lines.append(f"{name[:40]:40} MKT CAP  {market_cap_b:6.1f}B")
     else:
         lines.append(name[:60])
+
+    # Volume metrics
+    if volume is not None:
+        volume_m = volume / 1e6
+        vol_line = f"VOLUME   {volume_m:7.1f}M"
+
+        # Add relative volume (vs 3mo avg)
+        if rel_volume is not None and is_numeric(rel_volume):
+            vol_line += f"  ({rel_volume:.2f}x 3mo)"
+            # Flag unusual volume
+            if rel_volume > UNUSUAL_VOLUME_THRESHOLD:
+                vol_line += " ⚠"
+
+        # Add volume momentum (1W trend)
+        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
+            vol_line += f"  {vol_momentum_1w:+.0f}% 1W"
+
+            # Add annotation for significant trends
+            if vol_momentum_1w > 20:  # noqa: PLR2004
+                vol_line += "  (heating up)"
+            elif vol_momentum_1w < -20:  # noqa: PLR2004
+                vol_line += "  (cooling off)"
+
+        lines.append(vol_line)
+
     lines.append("")
 
     # Factor Exposures
@@ -494,7 +520,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     return "\n".join(lines)
 
 
-def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
+def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:  # noqa: PLR0915
     """Format batch ticker comparison - side-by-side comparison table"""
     if not data_list:
         return "ERROR: No ticker data provided"
@@ -513,7 +539,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
 
     # Header
     header = (
-        f"{'SYMBOL':8} {'NAME':30} {'PRICE':>10} {'CHG%':>8} "
+        f"{'SYMBOL':8} {'NAME':30} {'PRICE':>10} {'CHG%':>8} {'RVOL':>7} "
         f"{'BETA':>6} {'IDIO':>6} {'SHORT%':>8} {'MOM1W':>8} {'MOM1M':>8} {'MOM1Y':>8} "
         f"{'P/E':>8} {'DIV%':>6} {'RSI':>6}"
     )
@@ -531,6 +557,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         name = data.get("name", "")[:30]
         price = data.get("price")
         change_pct = data.get("change_percent")
+        rel_volume = data.get("rel_volume")
         beta_spx = data.get("beta_spx")
         idio_vol = data.get("idio_vol")
         short_pct_float = data.get("short_pct_float")
@@ -545,6 +572,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         # (yfinance sometimes returns strings like 'Infinity' for P/E)
         price_str = f"{price:10.2f}" if is_numeric(price) else " " * 10
         chg_str = f"{change_pct:+7.2f}%" if is_numeric(change_pct) else " " * 8
+        rvol_str = f"{rel_volume:6.2f}x" if is_numeric(rel_volume) else " " * 7
         beta_str = f"{beta_spx:6.2f}" if is_numeric(beta_spx) else " " * 6
         idio_str = f"{idio_vol:5.1f}%" if is_numeric(idio_vol) else " " * 6
         # Convert short % from decimal to percentage
@@ -561,7 +589,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         rsi_str = f"{rsi:6.1f}" if is_numeric(rsi) else " " * 6
 
         line = (
-            f"{symbol:8} {name:30} {price_str} {chg_str} "
+            f"{symbol:8} {name:30} {price_str} {chg_str} {rvol_str} "
             f"{beta_str} {idio_str} {short_str} {mom_1w_str} {mom_1m_str} {mom_1y_str} "
             f"{pe_str} {div_str} {rsi_str}"
         )

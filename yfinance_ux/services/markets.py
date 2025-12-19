@@ -5,14 +5,23 @@ Functions for fetching market overview data, ticker snapshots,
 and parallel data fetching for multiple symbols.
 """
 
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yfinance as yf  # type: ignore[import-untyped]
 
 from yfinance_ux.calculations.momentum import calculate_momentum
+from yfinance_ux.calculations.volume import (
+    calculate_relative_volume,
+    calculate_relative_volume_futures,
+)
 from yfinance_ux.common.constants import CATEGORY_MAPPING, MARKET_SYMBOLS
 from yfinance_ux.common.dates import is_market_open
+
+logger = logging.getLogger(__name__)
 
 
 def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, Any]:
@@ -41,8 +50,18 @@ def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, An
 
 
 def get_ticker_full_data(symbol: str) -> dict[str, Any]:
-    """Fetch comprehensive ticker data (price, momentum) for markets() screen using fast_info"""
+    """Fetch comprehensive ticker data (price, momentum) for markets() screen using fast_info
+
+    RVOL Time Window: Uses 10-day average (fast_info.tenDayAverageVolume)
+    - Rationale: FREE - already fetching fast_info for price data, no extra API call
+    - Purpose: Quick market scan to spot recent momentum shifts
+    - Trade-off: More sensitive to recent quiet/hot periods vs longer baseline
+
+    Note: ticker() screen uses 3-month average (info.averageVolume) for stable baseline.
+    Different time windows serve different purposes - this is intentional, not a bug!
+    """
     try:
+        logger.debug(f"yfinance API call: yf.Ticker('{symbol}')")
         ticker = yf.Ticker(symbol)
 
         # Futures require special handling - fast_info.previousClose is wrong reference
@@ -52,30 +71,48 @@ def get_ticker_full_data(symbol: str) -> dict[str, Any]:
 
         if is_futures:
             # Use info for futures (slower but accurate)
+            logger.debug(f"yfinance API call: {symbol}.info (futures)")
             info = ticker.info
             price = info.get("regularMarketPrice") or info.get("currentPrice")
             change_pct = info.get("regularMarketChangePercent")
+            avg_volume = info.get("averageVolume")
+            volume_today = info.get("volume")
         else:
             # Use fast_info for equities/ETFs (faster)
+            # tenDayAverageVolume comes FREE with this call - no extra API cost
+            logger.debug(f"yfinance API call: {symbol}.fast_info")
             price = ticker.fast_info.get("lastPrice")
             prev_close = ticker.fast_info.get("previousClose")
+            avg_volume = ticker.fast_info.get("tenDayAverageVolume")  # 10-day avg (FREE)
+            volume_today = ticker.fast_info.get("lastVolume")
 
             # Calculate change percent from fast_info data
             change_pct = None
             if price is not None and prev_close is not None and prev_close != 0:
                 change_pct = ((price - prev_close) / prev_close) * 100
 
+        # Volume analytics - extrapolate partial volume
+        # Futures: extrapolate over 24h cycle (resets at 6pm settlement)
+        # Session markets: extrapolate over 6.5h trading day (9:30am-4pm)
+        if is_futures:
+            rel_volume = calculate_relative_volume_futures(volume_today, avg_volume)
+        else:
+            rel_volume = calculate_relative_volume(volume_today, avg_volume)
+
         # Get momentum (already optimized with narrow windows)
         momentum = calculate_momentum(symbol)
 
+        logger.debug(f"yfinance API call SUCCESS: {symbol} (price={price}, change={change_pct:.2f}%)")
         return {
             "symbol": symbol,
             "price": price,
             "change_percent": change_pct,
+            "rel_volume": rel_volume,
             "momentum_1m": momentum.get("momentum_1m"),
             "momentum_1y": momentum.get("momentum_1y"),
         }
     except Exception as e:
+        logger.error(f"yfinance API call FAILED: {symbol} - {e}")
         return {"symbol": symbol, "error": str(e)}
 
 
@@ -204,6 +241,7 @@ def get_markets_data() -> dict[str, dict[str, Any]]:
         # Commodities
         ("gold", "GC=F"),
         ("silver", "SI=F"),
+        ("platinum", "PL=F"),
         ("copper", "HG=F"),
         ("oil_wti", "CL=F"),
         ("natgas", "NG=F"),
