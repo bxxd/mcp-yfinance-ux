@@ -348,6 +348,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
             # Get fields
             insider = str(txn.get("Insider", "Unknown"))[:20]
             position = str(txn.get("Position", "N/A"))[:20]
+            shares = txn.get("Shares")
 
             # Parse transaction type from Text field (e.g., "Sale at price...")
             text = txn.get("Text", "")
@@ -361,11 +362,16 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
             elif text:
                 # Extract first word for other types
                 transaction = text.split()[0] if text.split() else "N/A"
+            # Text is empty - infer from shares direction
+            # Positive shares = acquisition, negative = disposition
+            elif is_numeric(shares) and shares > 0:
+                transaction = "Acquire"
+            elif is_numeric(shares) and shares < 0:
+                transaction = "Dispose"
             else:
-                transaction = "N/A"
+                transaction = "Unknown"
             transaction = transaction[:10]  # Truncate to fit column
 
-            shares = txn.get("Shares")
             value = txn.get("Value")
 
             # Format shares and value
