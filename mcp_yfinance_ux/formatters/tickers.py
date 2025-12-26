@@ -361,7 +361,7 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
                 transaction = "Grant"
             elif text:
                 # Extract first word for other types
-                transaction = text.split()[0] if text.split() else "N/A"
+                transaction = text.split()[0] if text.split() else "Unknown"
             # Text is empty - infer from shares direction
             # Positive shares = acquisition, negative = disposition
             elif is_numeric(shares) and shares > 0:
