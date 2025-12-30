@@ -14,6 +14,7 @@ def normalize_ticker_symbol(symbol: str) -> str:
     Exchange suffixes (keep dots):
     - NEO.TO → NEO.TO (Toronto Stock Exchange)
     - MAI.V → MAI.V (TSX Venture Exchange)
+    - 7203.T → 7203.T (Tokyo Stock Exchange)
     - 0700.HK → 0700.HK (Hong Kong)
     - RIO.L → RIO.L (London)
     - BHP.AX → BHP.AX (Australia)
@@ -37,7 +38,7 @@ def normalize_ticker_symbol(symbol: str) -> str:
         if len(parts) == 2:  # noqa: PLR2004
             suffix = parts[1].upper()
             # Known single-letter exchange suffixes
-            single_letter_exchanges = {"L", "F", "P", "V"}  # London, Frankfurt, Paris, TSX Venture
+            single_letter_exchanges = {"L", "F", "P", "V", "T"}  # London, Frankfurt, Paris, TSX Venture, Tokyo
             # Exchange suffix if:
             # - Single uppercase letter in known set, OR
             # - 2+ uppercase characters
