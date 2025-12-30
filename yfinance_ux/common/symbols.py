@@ -38,7 +38,7 @@ def normalize_ticker_symbol(symbol: str) -> str:
         if len(parts) == 2:  # noqa: PLR2004
             suffix = parts[1].upper()
             # Known single-letter exchange suffixes
-            single_letter_exchanges = {"L", "F", "P", "V", "T"}  # London, Frankfurt, Paris, TSX Venture, Tokyo
+            single_letter_exchanges = {"L", "F", "V", "T"}  # London, Frankfurt, TSX Venture, Tokyo
             # Exchange suffix if:
             # - Single uppercase letter in known set, OR
             # - 2+ uppercase characters
