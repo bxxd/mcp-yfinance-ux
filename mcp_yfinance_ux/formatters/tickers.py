@@ -232,7 +232,36 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     if has_calendar:
         lines.append("")
 
-    # Momentum & Technicals (includes volume)
+    # Volume Analysis - separate section
+    if volume is not None:
+        lines.append("VOLUME ANALYSIS")
+        volume_m = volume / 1e6
+
+        # Determine annotation from volume momentum
+        vol_annotation = ""
+        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
+            if vol_momentum_1w > 20:  # noqa: PLR2004
+                vol_annotation = " ↑"
+            elif vol_momentum_1w < -20:  # noqa: PLR2004
+                vol_annotation = " ↓"
+
+        lines.append(f"Today: {volume_m:.1f}M{vol_annotation}")
+
+        # Add relative volume (vs 3mo avg)
+        if rel_volume is not None and is_numeric(rel_volume):
+            rel_vol_line = f"  vs 3mo avg: {rel_volume:.1f}x"
+            if rel_volume > UNUSUAL_VOLUME_THRESHOLD:
+                rel_vol_line += " ⚠"
+            lines.append(rel_vol_line)
+
+        # Add volume momentum (1W trend)
+        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
+            vol_1w_multiple = 1 + (vol_momentum_1w / 100)
+            lines.append(f"  vs 1W avg: {vol_1w_multiple:.1f}x")
+
+        lines.append("")
+
+    # Momentum & Technicals - separate section
     lines.append("MOMENTUM & TECHNICALS")
 
     # Price momentum
@@ -247,32 +276,6 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"1-Month          {mom_1m:+6.1f}%")
     if is_numeric(mom_1y):
         lines.append(f"1-Year           {mom_1y:+6.1f}%")
-
-    # Volume analysis (inline)
-    if volume is not None:
-        volume_m = volume / 1e6
-        vol_annotation = ""
-        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
-            if vol_momentum_1w > 20:  # noqa: PLR2004
-                vol_annotation = " ↑"
-            elif vol_momentum_1w < -20:  # noqa: PLR2004
-                vol_annotation = " ↓"
-
-        vol_line = f"Volume           {volume_m:6.1f}M{vol_annotation}"
-
-        if rel_volume is not None and is_numeric(rel_volume):
-            vol_line += f"  ({rel_volume:.1f}x 3mo"
-            if rel_volume > UNUSUAL_VOLUME_THRESHOLD:
-                vol_line += " ⚠"
-
-            # Add 1W comparison
-            if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
-                vol_1w_multiple = 1 + (vol_momentum_1w / 100)
-                vol_line += f", {vol_1w_multiple:.1f}x 1W"
-
-            vol_line += ")"
-
-        lines.append(vol_line)
 
     # Technical indicators
     fifty_day = data.get("fifty_day_avg")
