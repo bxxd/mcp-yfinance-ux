@@ -264,35 +264,35 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     # Momentum & Technicals - separate section
     lines.append("MOMENTUM & TECHNICALS")
 
-    # Price momentum
+    # Price momentum - fixed width labels for alignment
     if is_numeric(change_pct):
-        lines.append(f"1-Day            {change_pct:+6.1f}%")
+        lines.append(f"{'1-Day':<17}{change_pct:>+7.1f}%")
     mom_1w = data.get("momentum_1w")
     mom_1m = data.get("momentum_1m")
     mom_1y = data.get("momentum_1y")
     if is_numeric(mom_1w):
-        lines.append(f"1-Week           {mom_1w:+6.1f}%")
+        lines.append(f"{'1-Week':<17}{mom_1w:>+7.1f}%")
     if is_numeric(mom_1m):
-        lines.append(f"1-Month          {mom_1m:+6.1f}%")
+        lines.append(f"{'1-Month':<17}{mom_1m:>+7.1f}%")
     if is_numeric(mom_1y):
-        lines.append(f"1-Year           {mom_1y:+6.1f}%")
+        lines.append(f"{'1-Year':<17}{mom_1y:>+7.1f}%")
 
     # Technical indicators
     fifty_day = data.get("fifty_day_avg")
     two_hundred_day = data.get("two_hundred_day_avg")
     if is_numeric(fifty_day):
-        lines.append(f"50-Day MA        {fifty_day:7.2f}")
+        lines.append(f"{'50-Day MA':<17}{fifty_day:>7.2f}")
     if is_numeric(two_hundred_day):
-        lines.append(f"200-Day MA       {two_hundred_day:7.2f}")
+        lines.append(f"{'200-Day MA':<17}{two_hundred_day:>7.2f}")
 
     rsi = data.get("rsi")
     if is_numeric(rsi):
         rsi_signal = ""
         if rsi > RSI_OVERBOUGHT:
-            rsi_signal = "(Overbought)"
+            rsi_signal = "  (Overbought)"
         elif rsi < RSI_OVERSOLD:
-            rsi_signal = "(Oversold)"
-        lines.append(f"RSI (14D)        {rsi:5.1f}    {rsi_signal}")
+            rsi_signal = "  (Oversold)"
+        lines.append(f"{'RSI (14D)':<17}{rsi:>7.1f}{rsi_signal}")
     lines.append("")
 
     # 52-Week Range with visual bar
