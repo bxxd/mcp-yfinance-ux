@@ -138,31 +138,6 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"{name[:40]:40} MKT CAP  {market_cap_b:6.1f}B")
     else:
         lines.append(name[:60])
-
-    # Volume metrics
-    if volume is not None:
-        volume_m = volume / 1e6
-        vol_line = f"VOLUME   {volume_m:7.1f}M"
-
-        # Add relative volume (vs 3mo avg)
-        if rel_volume is not None and is_numeric(rel_volume):
-            vol_line += f"  ({rel_volume:.2f}x 3mo)"
-            # Flag unusual volume
-            if rel_volume > UNUSUAL_VOLUME_THRESHOLD:
-                vol_line += " ⚠"
-
-        # Add volume momentum (1W trend)
-        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
-            vol_line += f"  {vol_momentum_1w:+.0f}% 1W"
-
-            # Add annotation for significant trends
-            if vol_momentum_1w > 20:  # noqa: PLR2004
-                vol_line += "  (heating up)"
-            elif vol_momentum_1w < -20:  # noqa: PLR2004
-                vol_line += "  (cooling off)"
-
-        lines.append(vol_line)
-
     lines.append("")
 
     # Factor Exposures
@@ -257,8 +232,12 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     if has_calendar:
         lines.append("")
 
-    # Momentum & Technicals
+    # Momentum & Technicals (includes volume)
     lines.append("MOMENTUM & TECHNICALS")
+
+    # Price momentum
+    if is_numeric(change_pct):
+        lines.append(f"1-Day            {change_pct:+6.1f}%")
     mom_1w = data.get("momentum_1w")
     mom_1m = data.get("momentum_1m")
     mom_1y = data.get("momentum_1y")
@@ -269,6 +248,33 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     if is_numeric(mom_1y):
         lines.append(f"1-Year           {mom_1y:+6.1f}%")
 
+    # Volume analysis (inline)
+    if volume is not None:
+        volume_m = volume / 1e6
+        vol_annotation = ""
+        if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
+            if vol_momentum_1w > 20:  # noqa: PLR2004
+                vol_annotation = " ↑"
+            elif vol_momentum_1w < -20:  # noqa: PLR2004
+                vol_annotation = " ↓"
+
+        vol_line = f"Volume           {volume_m:6.1f}M{vol_annotation}"
+
+        if rel_volume is not None and is_numeric(rel_volume):
+            vol_line += f"  ({rel_volume:.1f}x 3mo"
+            if rel_volume > UNUSUAL_VOLUME_THRESHOLD:
+                vol_line += " ⚠"
+
+            # Add 1W comparison
+            if vol_momentum_1w is not None and is_numeric(vol_momentum_1w):
+                vol_1w_multiple = 1 + (vol_momentum_1w / 100)
+                vol_line += f", {vol_1w_multiple:.1f}x 1W"
+
+            vol_line += ")"
+
+        lines.append(vol_line)
+
+    # Technical indicators
     fifty_day = data.get("fifty_day_avg")
     two_hundred_day = data.get("two_hundred_day_avg")
     if is_numeric(fifty_day):
