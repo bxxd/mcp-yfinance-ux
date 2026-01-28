@@ -52,7 +52,21 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             return {"error": f"No options data available for {symbol}"}
 
         # Select expiration
-        exp_date = expirations[0] if expiration == "nearest" else expiration
+        if expiration == "nearest":
+            # Skip 0-DTE expirations (same-day) - yfinance often returns incomplete data
+            now = datetime.now(ZoneInfo("America/New_York"))
+            valid_expirations = []
+            for exp in expirations:
+                exp_dt = datetime.strptime(exp, "%Y-%m-%d").replace(
+                    tzinfo=ZoneInfo("America/New_York")
+                )
+                if (exp_dt - now).days >= 1:
+                    valid_expirations.append(exp)
+            if not valid_expirations:
+                return {"error": f"No valid expirations for {symbol} (all are 0-DTE)"}
+            exp_date = valid_expirations[0]
+        else:
+            exp_date = expiration
         if exp_date not in expirations:
             return {"error": f"Expiration {expiration} not available"}
 
@@ -123,6 +137,8 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         pc_ratio_vol = put_volume_total / call_volume_total if call_volume_total > 0 else 0
 
         # Find ATM strike (closest to current price)
+        if len(calls["strike"]) == 0:
+            return {"error": f"No strike data available for {symbol} expiration {exp_date}"}
         atm_strike = calls["strike"].iloc[(calls["strike"] - current_price).abs().argsort()[0]]
 
         # Get ATM IV and greeks
