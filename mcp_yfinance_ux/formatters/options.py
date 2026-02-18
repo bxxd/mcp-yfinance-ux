@@ -117,20 +117,22 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
     atm_call_iv = data["atm_call_iv"]
     atm_put_iv = data["atm_put_iv"]
     iv_spread = data["iv_spread"]
+    options_market_closed = data.get("options_market_closed", False)
     unusual = ""
     if abs(iv_spread) > 2:  # noqa: PLR2004
         direction = "calls" if iv_spread > 0 else "puts"
         unusual = f"← UNUSUAL ({direction} typically lower)"
 
-    lines.extend(
-        [
-            "IMPLIED VOLATILITY",
-            f"ATM Calls:     {atm_call_iv:.1f}%",
-            f"ATM Puts:      {atm_put_iv:.1f}%",
-            f"Spread:        {iv_spread:+.1f}% {'calls' if iv_spread > 0 else 'puts'}  {unusual}",
-            "",
-        ]
-    )
+    iv_lines = ["IMPLIED VOLATILITY"]
+    if options_market_closed:
+        iv_lines.append("NOTE: Options market closed - IV estimated from last traded prices")
+    iv_lines.extend([
+        f"ATM Calls:     {atm_call_iv:.1f}%",
+        f"ATM Puts:      {atm_put_iv:.1f}%",
+        f"Spread:        {iv_spread:+.1f}% {'calls' if iv_spread > 0 else 'puts'}  {unusual}",
+        "",
+    ])
+    lines.extend(iv_lines)
 
     # Greeks (ATM strike)
     atm_call_greeks = data.get("atm_call_greeks", {})
