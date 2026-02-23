@@ -11,8 +11,72 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf  # type: ignore[import-untyped]
 
-from yfinance_ux.calculations.greeks import calculate_greeks
+from yfinance_ux.calculations.greeks import calculate_greeks, implied_vol_from_price
 from yfinance_ux.common.symbols import normalize_ticker_symbol
+
+
+def _is_options_market_closed(chain: Any) -> bool:
+    """Detect if options market is closed (bid=ask=0 on most strikes)."""
+    if "bid" not in chain.columns or "ask" not in chain.columns:
+        return False
+    near_zero = (chain["bid"] <= 0.001) & (chain["ask"] <= 0.001)
+    # If >80% of strikes have zero bid/ask, market is closed
+    return bool(near_zero.mean() > 0.8)
+
+
+def _find_atm_iv(
+    chain: Any,
+    current_price: float,
+    option_type: str = "call",
+    time_to_expiry: float = 0.0,
+    risk_free_rate: float = 0.045,
+    dividend_yield: float = 0.0,
+) -> float:
+    """Find ATM implied volatility, filtering out garbage yfinance IV values.
+
+    When options market is closed (bid=ask=0), yfinance IV is garbage —
+    even non-zero values are artifacts. In that case, compute IV from
+    lastPrice via Black-Scholes.
+
+    Returns:
+        ATM IV as percentage (e.g. 35.0 for 35%), or 0.0 if unsolvable
+    """
+    # Strikes within ±10% of spot
+    near = chain[
+        (chain["strike"] >= current_price * 0.9)
+        & (chain["strike"] <= current_price * 1.1)
+    ]
+    if near.empty:
+        return 0.0
+
+    market_closed = _is_options_market_closed(chain)
+
+    if not market_closed:
+        # Market open: use yfinance IV, filter out zeros
+        valid_iv = near[near["impliedVolatility"] > 0.01]
+        if not valid_iv.empty:
+            best_idx = (valid_iv["strike"] - current_price).abs().idxmin()
+            return float(valid_iv.loc[best_idx, "impliedVolatility"] * 100)
+
+    # Market closed or no valid IV: compute from lastPrice via BS
+    if time_to_expiry > 0:
+        best_idx = (near["strike"] - current_price).abs().idxmin()
+        row = near.loc[best_idx]
+        market_price = float(row["lastPrice"])
+        strike = float(row["strike"])
+        if market_price > 0:
+            iv = implied_vol_from_price(
+                market_price=market_price,
+                spot=current_price,
+                strike=strike,
+                time_to_expiry=time_to_expiry,
+                risk_free_rate=risk_free_rate,
+                dividend_yield=dividend_yield,
+                option_type=option_type,
+            )
+            return iv * 100  # Convert to percentage
+
+    return 0.0
 
 
 def get_risk_free_rate() -> float:
@@ -143,24 +207,33 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
 
         # Get ATM IV and greeks
         atm_call_row = calls[calls["strike"] == atm_strike]
+        # Put ATM: use exact strike if available, else closest put strike
         atm_put_row = puts[puts["strike"] == atm_strike]
+        if atm_put_row.empty and not puts.empty:
+            put_atm_idx = (puts["strike"] - current_price).abs().argsort().iloc[0]
+            atm_put_row = puts.iloc[[put_atm_idx]]
 
-        atm_call_iv = float(atm_call_row["impliedVolatility"].values[0] * 100)
-        atm_put_iv = float(atm_put_row["impliedVolatility"].values[0] * 100)
+        # Detect closed options market (bid=ask=0)
+        options_market_closed = _is_options_market_closed(calls)
+
+        atm_call_iv = _find_atm_iv(
+            calls, current_price, "call", time_to_expiry, risk_free_rate, dividend_yield)
+        atm_put_iv = _find_atm_iv(
+            puts, current_price, "put", time_to_expiry, risk_free_rate, dividend_yield)
 
         # ATM greeks
-        atm_call_greeks = {
-            "delta": float(atm_call_row["delta"].values[0]),
-            "gamma": float(atm_call_row["gamma"].values[0]),
-            "vega": float(atm_call_row["vega"].values[0]),
-            "theta": float(atm_call_row["theta"].values[0]),
-        }
-        atm_put_greeks = {
-            "delta": float(atm_put_row["delta"].values[0]),
-            "gamma": float(atm_put_row["gamma"].values[0]),
-            "vega": float(atm_put_row["vega"].values[0]),
-            "theta": float(atm_put_row["theta"].values[0]),
-        }
+        def _greeks_from_row(row: Any) -> dict[str, float]:
+            if row.empty:
+                return {"delta": 0.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0}
+            return {
+                "delta": float(row["delta"].values[0]),
+                "gamma": float(row["gamma"].values[0]),
+                "vega": float(row["vega"].values[0]),
+                "theta": float(row["theta"].values[0]),
+            }
+
+        atm_call_greeks = _greeks_from_row(atm_call_row)
+        atm_put_greeks = _greeks_from_row(atm_put_row)
 
         # Top positions by OI (expand to 10)
         top_calls_oi = calls.nlargest(10, "openInterest")[
@@ -197,16 +270,42 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         otm_put_strikes = puts[puts["strike"] < current_price * 0.9]
         otm_call_strikes = calls[calls["strike"] > current_price * 1.1]
 
-        otm_put_iv_avg = (
-            float(otm_put_strikes["impliedVolatility"].mean() * 100)
-            if len(otm_put_strikes) > 0
-            else atm_put_iv
-        )
-        otm_call_iv_avg = (
-            float(otm_call_strikes["impliedVolatility"].mean() * 100)
-            if len(otm_call_strikes) > 0
-            else atm_call_iv
-        )
+        if options_market_closed and time_to_expiry > 0:
+            # Compute IV from lastPrice for OTM strikes (yfinance IV is garbage)
+            otm_put_ivs = []
+            for _, row in otm_put_strikes.iterrows():
+                if float(row["lastPrice"]) > 0:
+                    iv = implied_vol_from_price(
+                        float(row["lastPrice"]), current_price, float(row["strike"]),
+                        time_to_expiry, risk_free_rate, dividend_yield, "put") * 100
+                    if iv > 1:  # Filter out unsolvable
+                        otm_put_ivs.append(iv)
+            otm_call_ivs = []
+            for _, row in otm_call_strikes.iterrows():
+                if float(row["lastPrice"]) > 0:
+                    iv = implied_vol_from_price(
+                        float(row["lastPrice"]), current_price, float(row["strike"]),
+                        time_to_expiry, risk_free_rate, dividend_yield, "call") * 100
+                    if iv > 1:  # Filter out unsolvable
+                        otm_call_ivs.append(iv)
+            otm_put_iv_avg = sum(otm_put_ivs) / len(otm_put_ivs) if otm_put_ivs else atm_put_iv
+            otm_call_iv_avg = (
+                sum(otm_call_ivs) / len(otm_call_ivs) if otm_call_ivs else atm_call_iv
+            )
+        else:
+            # Market open: use yfinance IV, filter out zeros
+            otm_puts_valid = otm_put_strikes[otm_put_strikes["impliedVolatility"] > 0.01]
+            otm_calls_valid = otm_call_strikes[otm_call_strikes["impliedVolatility"] > 0.01]
+            otm_put_iv_avg = (
+                float(otm_puts_valid["impliedVolatility"].mean() * 100)
+                if len(otm_puts_valid) > 0
+                else atm_put_iv
+            )
+            otm_call_iv_avg = (
+                float(otm_calls_valid["impliedVolatility"].mean() * 100)
+                if len(otm_calls_valid) > 0
+                else atm_call_iv
+            )
 
         put_skew = otm_put_iv_avg - atm_put_iv
         call_skew = otm_call_iv_avg - atm_call_iv
@@ -217,20 +316,19 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             for exp in expirations[:3]:  # Near, mid, far
                 chain_exp = ticker.option_chain(exp)
                 calls_exp = chain_exp.calls
-                atm_exp = calls_exp["strike"].iloc[
-                    (calls_exp["strike"] - current_price).abs().argsort()[0]
-                ]
-                atm_row_exp = calls_exp[calls_exp["strike"] == atm_exp]
-                iv_exp = float(atm_row_exp["impliedVolatility"].values[0] * 100)
 
                 # Days to expiration
                 exp_datetime = datetime.strptime(exp, "%Y-%m-%d").replace(
                     tzinfo=ZoneInfo("America/New_York")
                 )
                 now = datetime.now(ZoneInfo("America/New_York"))
-                dte = (exp_datetime - now).days
+                dte_exp = (exp_datetime - now).days
+                tte_exp = max(dte_exp / 365.0, 0.001)
 
-                term_structure.append({"expiration": exp, "dte": dte, "iv": iv_exp})
+                iv_exp = _find_atm_iv(
+                    calls_exp, current_price, "call", tte_exp, risk_free_rate, dividend_yield)
+
+                term_structure.append({"expiration": exp, "dte": dte_exp, "iv": iv_exp})
 
         contango = (
             term_structure[0]["iv"] - term_structure[-1]["iv"]
@@ -250,12 +348,17 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
                 calls_exp["volume"] = calls_exp["volume"].fillna(0)
                 puts_exp["volume"] = puts_exp["volume"].fillna(0)
 
-                # ATM IV for this expiration
-                atm_exp = calls_exp["strike"].iloc[
-                    (calls_exp["strike"] - current_price).abs().argsort()[0]
-                ]
-                atm_row_exp = calls_exp[calls_exp["strike"] == atm_exp]
-                iv_exp = float(atm_row_exp["impliedVolatility"].values[0] * 100)
+                # DTE
+                exp_datetime = datetime.strptime(exp, "%Y-%m-%d").replace(
+                    tzinfo=ZoneInfo("America/New_York")
+                )
+                now = datetime.now(ZoneInfo("America/New_York"))
+                dte_exp = (exp_datetime - now).days
+                tte_exp = max(dte_exp / 365.0, 0.001)
+
+                # ATM IV for this expiration (filter out 0% IV, fallback to BS)
+                iv_exp = _find_atm_iv(
+                    calls_exp, current_price, "call", tte_exp, risk_free_rate, dividend_yield)
 
                 # OI for this expiration
                 call_oi_exp = int(calls_exp["openInterest"].sum())
@@ -266,13 +369,6 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
                 call_vol_exp = int(calls_exp["volume"].sum())
                 put_vol_exp = int(puts_exp["volume"].sum())
                 total_vol_exp = call_vol_exp + put_vol_exp
-
-                # DTE
-                exp_datetime = datetime.strptime(exp, "%Y-%m-%d").replace(
-                    tzinfo=ZoneInfo("America/New_York")
-                )
-                now = datetime.now(ZoneInfo("America/New_York"))
-                dte_exp = (exp_datetime - now).days
 
                 all_expirations.append({
                     "expiration": exp,
@@ -379,6 +475,7 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             "atm_call_iv": atm_call_iv,
             "atm_put_iv": atm_put_iv,
             "iv_spread": atm_call_iv - atm_put_iv,
+            "options_market_closed": options_market_closed,
             # Greeks
             "atm_call_greeks": atm_call_greeks,
             "atm_put_greeks": atm_put_greeks,

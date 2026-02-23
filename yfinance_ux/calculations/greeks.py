@@ -1,4 +1,4 @@
-"""Black-Scholes greeks calculation."""
+"""Black-Scholes greeks calculation and IV solver."""
 
 from math import exp, log, sqrt
 from typing import TypedDict
@@ -14,6 +14,77 @@ class Greeks(TypedDict):
     vega: float
     theta: float
     rho: float
+
+
+def _bs_price(
+    spot: float,
+    strike: float,
+    time_to_expiry: float,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    option_type: str,
+) -> float:
+    """Black-Scholes option price."""
+    d1 = (
+        log(spot / strike)
+        + (risk_free_rate - dividend_yield + 0.5 * volatility**2) * time_to_expiry
+    ) / (volatility * sqrt(time_to_expiry))
+    d2 = d1 - volatility * sqrt(time_to_expiry)
+
+    if option_type == "call":
+        return (
+            spot * exp(-dividend_yield * time_to_expiry) * norm.cdf(d1)
+            - strike * exp(-risk_free_rate * time_to_expiry) * norm.cdf(d2)
+        )
+    else:
+        return (
+            strike * exp(-risk_free_rate * time_to_expiry) * norm.cdf(-d2)
+            - spot * exp(-dividend_yield * time_to_expiry) * norm.cdf(-d1)
+        )
+
+
+def implied_vol_from_price(
+    market_price: float,
+    spot: float,
+    strike: float,
+    time_to_expiry: float,
+    risk_free_rate: float,
+    dividend_yield: float = 0.0,
+    option_type: str = "call",
+) -> float:
+    """
+    Solve for implied volatility from market price using bisection.
+
+    Returns IV as decimal (e.g. 0.35 for 35%), or 0.0 if unsolvable.
+    """
+    if market_price <= 0 or spot <= 0 or strike <= 0 or time_to_expiry <= 0:
+        return 0.0
+
+    # Intrinsic value check
+    if option_type == "call":
+        intrinsic = max(0.0, spot - strike)
+    else:
+        intrinsic = max(0.0, strike - spot)
+
+    if market_price < intrinsic:
+        return 0.0
+
+    lo, hi = 0.01, 5.0  # 1% to 500% vol range
+    for _ in range(50):  # bisection iterations
+        mid = (lo + hi) / 2
+        try:
+            price = _bs_price(spot, strike, time_to_expiry, mid,
+                              risk_free_rate, dividend_yield, option_type)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+        if price < market_price:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 0.0001:
+            break
+    return (lo + hi) / 2
 
 
 def calculate_greeks(
