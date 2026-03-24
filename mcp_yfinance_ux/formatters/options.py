@@ -336,6 +336,44 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             "",
         ])
 
+    # Market Implied Survival
+    survival = data.get("implied_survival")
+    if survival:
+        surv_exp = survival["expiration"]
+        surv_dte = survival["dte"]
+        surv_price = survival["current_price"]
+        surv_levels = survival["levels"]
+
+        divider = "\u2500" * 49
+        lines.extend([
+            "MARKET IMPLIED SURVIVAL",
+            f"  Horizon: {surv_dte}d ({surv_exp})",
+            f"  Current: ${surv_price:.2f}",
+            "",
+            "  Level              Strike    Put \u0394    Mkt Implied",
+            f"  {divider}",
+        ])
+
+        for lv in surv_levels:
+            label = lv["label"]
+            strike = lv["actual_strike"]
+            delta = lv["put_delta"]
+            implied = lv["implied_above"]
+            pct = implied * 100
+
+            word = (
+                "survive"
+                if "Death" in label or "Severe" in label
+                else "above"
+            )
+
+            lines.append(
+                f"  {label:<17}  ${strike:>7.2f}   {delta:>6.2f}"
+                f"    {pct:.0f}% {word}"
+            )
+
+        lines.append("")
+
     # All Expirations Summary
     all_exp = data.get("all_expirations", [])
     if all_exp:

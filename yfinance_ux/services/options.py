@@ -2,7 +2,8 @@
 Options chain data service.
 
 Comprehensive options analysis: positioning, IV structure, term structure,
-unusual activity, max pain calculation, historical IV context, greeks.
+unusual activity, max pain calculation, historical IV context, greeks,
+market implied survival.
 """
 
 from datetime import datetime
@@ -13,6 +14,155 @@ import yfinance as yf  # type: ignore[import-untyped]
 
 from yfinance_ux.calculations.greeks import calculate_greeks, implied_vol_from_price
 from yfinance_ux.common.symbols import normalize_ticker_symbol
+
+
+class SurvivalLevel:
+    """A single strike level for implied survival computation."""
+
+    __slots__ = ("label", "pct_below", "target_strike", "actual_strike", "put_delta", "implied_prob")
+
+    def __init__(self, label: str, pct_below: float) -> None:
+        self.label = label
+        self.pct_below = pct_below
+        self.target_strike: float = 0.0
+        self.actual_strike: float = 0.0
+        self.put_delta: float = 0.0
+        self.implied_prob: float = 0.0
+
+
+def compute_implied_survival(
+    ticker: Any,
+    current_price: float,
+    all_expirations: list[dict[str, Any]],
+    risk_free_rate: float,
+    dividend_yield: float,
+) -> dict[str, Any] | None:
+    """Compute market implied survival from options put deltas.
+
+    Picks the expiration with the highest total OI (most market expression),
+    finds puts at distress/death/severe strike levels, and uses |delta| as
+    the market-implied probability of reaching those levels.
+
+    Args:
+        ticker: yfinance Ticker object (already instantiated)
+        current_price: Current stock price
+        all_expirations: List of expiration dicts with 'expiration', 'dte', 'total_oi'
+        risk_free_rate: Annual risk-free rate as decimal
+        dividend_yield: Annual dividend yield as decimal
+
+    Returns:
+        Dict with survival data, or None if insufficient data
+    """
+    if not all_expirations or current_price <= 0:
+        return None
+
+    # Find expiration with highest total OI
+    best_exp = max(all_expirations, key=lambda x: x.get("total_oi", 0))
+    if best_exp.get("total_oi", 0) == 0:
+        return None
+
+    exp_date = best_exp["expiration"]
+    dte = best_exp["dte"]
+
+    # Skip very short-dated expirations (< 7 days) — deltas are too binary
+    if dte < 7:  # noqa: PLR2004
+        return None
+
+    time_to_expiry = max(dte / 365.0, 0.001)
+
+    # Fetch the put chain for this expiration
+    try:
+        chain = ticker.option_chain(exp_date)
+        puts = chain.puts
+    except Exception:
+        return None
+
+    if puts.empty:
+        return None
+
+    # Define survival levels
+    levels = [
+        SurvivalLevel("Distress (-25%)", 0.25),
+        SurvivalLevel("Death (-50%)", 0.50),
+        SurvivalLevel("Severe (-75%)", 0.75),
+    ]
+
+    # For each level, find the nearest put strike and compute delta
+    results: list[dict[str, Any]] = []
+    has_meaningful_data = False
+
+    for level in levels:
+        level.target_strike = current_price * (1.0 - level.pct_below)
+
+        # Find nearest put strike
+        strike_diffs = (puts["strike"] - level.target_strike).abs()
+        nearest_idx = strike_diffs.idxmin()
+        nearest_row = puts.loc[nearest_idx]
+        level.actual_strike = float(nearest_row["strike"])
+
+        # Skip if nearest strike is too far from target (>20% of target strike)
+        # This means the options chain doesn't extend far enough
+        if abs(level.actual_strike - level.target_strike) > level.target_strike * 0.20:
+            continue
+
+        # Get IV for this strike — prefer yfinance IV, fall back to BS from lastPrice
+        iv = float(nearest_row.get("impliedVolatility", 0.0))
+
+        if iv <= 0.01 and time_to_expiry > 0:
+            # Try to solve IV from last traded price
+            last_price = float(nearest_row.get("lastPrice", 0.0))
+            if last_price > 0:
+                iv = implied_vol_from_price(
+                    market_price=last_price,
+                    spot=current_price,
+                    strike=level.actual_strike,
+                    time_to_expiry=time_to_expiry,
+                    risk_free_rate=risk_free_rate,
+                    dividend_yield=dividend_yield,
+                    option_type="put",
+                )
+
+        if iv <= 0.01:
+            # Cannot compute meaningful delta without IV
+            continue
+
+        # Compute put delta via Black-Scholes
+        try:
+            greeks = calculate_greeks(
+                spot=current_price,
+                strike=level.actual_strike,
+                time_to_expiry=time_to_expiry,
+                volatility=iv,
+                risk_free_rate=risk_free_rate,
+                dividend_yield=dividend_yield,
+                option_type="put",
+            )
+            level.put_delta = greeks["delta"]  # Negative for puts
+        except Exception:
+            continue
+
+        # |delta| = market-implied probability of expiring ITM (below strike)
+        prob_below = abs(level.put_delta)
+        level.implied_prob = 1.0 - prob_below  # probability of staying ABOVE
+
+        has_meaningful_data = True
+        results.append({
+            "label": level.label,
+            "target_strike": level.target_strike,
+            "actual_strike": level.actual_strike,
+            "put_delta": level.put_delta,
+            "implied_above": level.implied_prob,
+        })
+
+    if not has_meaningful_data:
+        return None
+
+    return {
+        "expiration": exp_date,
+        "dte": dte,
+        "current_price": current_price,
+        "levels": results,
+    }
 
 
 def _is_options_market_closed(chain: Any) -> bool:
@@ -442,6 +592,15 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         except Exception:
             pass
 
+        # Market implied survival (uses highest-OI expiration)
+        implied_survival = compute_implied_survival(
+            ticker=ticker,
+            current_price=float(current_price),
+            all_expirations=all_expirations,
+            risk_free_rate=risk_free_rate,
+            dividend_yield=dividend_yield,
+        )
+
         # Days to expiration
         exp_datetime = datetime.strptime(exp_date, "%Y-%m-%d").replace(
             tzinfo=ZoneInfo("America/New_York")
@@ -500,6 +659,8 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             "unusual_puts": unusual_puts,
             # Historical IV context
             "hist_iv_data": hist_iv_data,
+            # Market implied survival
+            "implied_survival": implied_survival,
             # Timestamp
             "timestamp": timestamp,
         }
