@@ -6,7 +6,7 @@ unusual activity, max pain calculation, historical IV context, greeks,
 market implied survival.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -245,6 +245,15 @@ def get_risk_free_rate() -> float:
         return 0.045  # Fallback to 4.5%
 
 
+def _is_monthly_expiry(d: date) -> bool:
+    """Return True if d is the 3rd Friday of its month (standard US monthly options expiry)."""
+    if d.weekday() != 4:  # Not a Friday
+        return False
+    first_day = d.replace(day=1)
+    first_friday_offset = (4 - first_day.weekday()) % 7
+    return d.day == 1 + first_friday_offset + 14
+
+
 def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915, PLR0912
     """
     Fetch options chain data for a symbol.
@@ -267,18 +276,29 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
 
         # Select expiration
         if expiration == "nearest":
-            # Skip 0-DTE expirations (same-day) - yfinance often returns incomplete data
-            now = datetime.now(ZoneInfo("America/New_York"))
-            valid_expirations = []
+            today = datetime.now(ZoneInfo("America/New_York")).date()
+            candidates = []
             for exp in expirations:
-                exp_dt = datetime.strptime(exp, "%Y-%m-%d").replace(
-                    tzinfo=ZoneInfo("America/New_York")
+                exp_dt = datetime.strptime(exp, "%Y-%m-%d").date()
+                dte = (exp_dt - today).days
+                if dte >= 14:  # noqa: PLR2004
+                    candidates.append((exp, exp_dt, dte))
+            if not candidates:
+                # Fall back to any expiry ≥1 DTE (very short-dated name)
+                exp_date = next(
+                    (
+                        exp
+                        for exp in expirations
+                        if (datetime.strptime(exp, "%Y-%m-%d").date() - today).days >= 1
+                    ),
+                    None,
                 )
-                if (exp_dt - now).days >= 1:
-                    valid_expirations.append(exp)
-            if not valid_expirations:
-                return {"error": f"No valid expirations for {symbol} (all are 0-DTE)"}
-            exp_date = valid_expirations[0]
+                if exp_date is None:
+                    return {"error": f"No valid expirations for {symbol} (all are 0-DTE)"}
+            else:
+                # Prefer nearest monthly (3rd Friday) ≥14 DTE for liquid OI
+                monthly = [c for c in candidates if _is_monthly_expiry(c[1])]
+                exp_date = monthly[0][0] if monthly else candidates[0][0]
         else:
             exp_date = expiration
         if exp_date not in expirations:
@@ -480,7 +500,7 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
 
                 term_structure.append({"expiration": exp, "dte": dte_exp, "iv": iv_exp})
 
-        contango = (
+        iv_slope = (
             term_structure[0]["iv"] - term_structure[-1]["iv"]
             if len(term_structure) >= 2  # noqa: PLR2004
             else 0
@@ -648,7 +668,7 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             "top_puts_vol": top_puts_vol,
             # Term structure
             "term_structure": term_structure,
-            "contango": contango,
+            "iv_slope": iv_slope,
             # All expirations
             "all_expirations": all_expirations,
             # Max pain
