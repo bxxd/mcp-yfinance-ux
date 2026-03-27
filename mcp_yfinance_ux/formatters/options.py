@@ -190,15 +190,15 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             marker = "← Current" if idx == 0 else ""
             lines.append(f"{label} ({ts['dte']}d):    {ts['iv']:.1f}%       {marker}")
 
-        contango = data["contango"]
-        if contango > 5:  # noqa: PLR2004
+        iv_slope = data["iv_slope"]
+        if iv_slope > 5:  # noqa: PLR2004
             far_iv = data["term_structure"][-1]["iv"]
             compression_note = f"← Market expects compression (to {far_iv:.1f}%)"
-        elif contango < -5:  # noqa: PLR2004
-            compression_note = "← Backwardation (vol expected to rise)"
+        elif iv_slope < -5:  # noqa: PLR2004
+            compression_note = "← Inverted IV (vol expected to rise)"
         else:
             compression_note = "← Flat term structure"
-        lines.append(f"Contango:     {contango:+.1f}%       {compression_note}")
+        lines.append(f"IV Slope:     {iv_slope:+.1f}%       {compression_note}")
         lines.append("")
 
     # Interpretation (progressive disclosure principle - summary at bottom)
@@ -229,16 +229,16 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
         interp_lines.append("• Flat skew: no panic premium in OTM puts")
 
     # Term structure insight
-    if data["term_structure"] and abs(contango) > 5:  # noqa: PLR2004
-        if contango > 5:  # noqa: PLR2004
+    if data["term_structure"] and abs(iv_slope) > 5:  # noqa: PLR2004
+        if iv_slope > 5:  # noqa: PLR2004
             near_iv = data["term_structure"][0]["iv"]
             far_iv = data["term_structure"][-1]["iv"]
             interp_lines.append(
-                f"• Term structure contango: market pricing vol compression "
+                f"• IV term structure: market pricing vol compression "
                 f"from {near_iv:.1f}% → {far_iv:.1f}%"
             )
         else:
-            interp_lines.append("• Backwardation: market expects volatility to increase")
+            interp_lines.append("• Inverted IV: market expects volatility to increase")
 
     lines.extend(interp_lines)
     lines.append("")
