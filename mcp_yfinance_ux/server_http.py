@@ -26,7 +26,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
-from .handlers import call_tool as handle_tool
+from .handlers import call_tool as handle_tool, normalize_symbols
 from .logging_config import get_logger, setup_async_logging
 from .tools import get_mcp_tools
 
@@ -102,6 +102,41 @@ async def handle_shutdown(_request: Request) -> JSONResponse:
     return JSONResponse({"status": "shutting down"})
 
 
+async def handle_prices(request: Request) -> JSONResponse:
+    """Batch price endpoint: GET /api/prices?tickers=AAPL,GOSS,TSLA
+
+    Returns {ticker: {price, market_cap}} using cached data from MCP ticker() calls.
+    Only cache — never triggers new yfinance fetches. Safe for bulk queries.
+    """
+    tickers_param = request.query_params.get("tickers", "")
+    if not tickers_param:
+        return JSONResponse({"error": "tickers parameter required"}, status_code=400)
+
+    symbols = normalize_symbols(tickers_param)
+    if not symbols:
+        return JSONResponse({"error": "no valid tickers"}, status_code=400)
+
+    logger.info(f"prices() batch: {len(symbols)} tickers")
+
+    from .cache import get_cached_data
+
+    result: dict[str, dict[str, float | None]] = {}
+    for sym in symbols:
+        cached = get_cached_data(sym)
+        if cached is not None:
+            result[sym] = {
+                "price": cached.get("price"),
+                "market_cap": cached.get("market_cap"),
+            }
+        else:
+            result[sym] = {"price": None, "market_cap": None}
+
+    hit = sum(1 for v in result.values() if v["price"] is not None)
+    logger.info(f"prices() batch: {hit}/{len(symbols)} cache hits")
+
+    return JSONResponse(result)
+
+
 async def handle_sse(request: Request) -> Response:
     """
     SSE endpoint for MCP protocol.
@@ -135,6 +170,7 @@ async def handle_sse(request: Request) -> Response:
 app = Starlette(
     routes=[
         Route("/ping", endpoint=handle_ping, methods=["GET"]),
+        Route("/api/prices", endpoint=handle_prices, methods=["GET"]),
         Route("/shutdown", endpoint=handle_shutdown, methods=["POST"]),
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=sse_transport.handle_post_message),
