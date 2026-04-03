@@ -5,8 +5,14 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from mcp_yfinance_ux.logging_config import get_logger
-from yfinance_ux.common.constants import SATURDAY
-from yfinance_ux.common.dates import is_market_open
+from yfinance_ux.common.dates import (
+    get_next_asia_open,
+    get_next_europe_open,
+    get_next_us_open,
+    is_asia_market_open,
+    is_europe_market_open,
+    is_market_open,
+)
 
 logger = get_logger(__name__)
 
@@ -33,23 +39,14 @@ FUTURES_SYMBOLS = {
     "GC=F", "SI=F", "PL=F", "HG=F", "CL=F", "NG=F",  # Commodity futures
 }
 
-
-def get_next_market_open() -> datetime:
-    """Get the next market open time (9:30am ET)"""
-    now = datetime.now(ZoneInfo("America/New_York"))
-
-    # Start with today's 9:30am
-    next_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-
-    # If we're past 9:30am today, move to tomorrow
-    if now >= next_open:
-        next_open = next_open + timedelta(days=1)
-
-    # Handle weekends - if next_open is Saturday or Sunday, move to Monday
-    while next_open.weekday() >= SATURDAY:
-        next_open = next_open + timedelta(days=1)
-
-    return next_open
+# Symbol to region: determines which market session governs cache expiry
+SYMBOL_REGION: dict[str, str] = {
+    # European indices
+    "^STOXX50E": "europe", "^GDAXI": "europe", "^FTSE": "europe", "^FCHI": "europe",
+    # Asian indices
+    "^N225": "asia", "^HSI": "asia", "000001.SS": "asia",
+    "^KS11": "asia", "^NSEI": "asia", "^AXJO": "asia", "^TWII": "asia",
+}
 
 
 def is_24_hour_market(symbol: str) -> bool:
@@ -58,22 +55,34 @@ def is_24_hour_market(symbol: str) -> bool:
 
 
 def get_cache_expiry(symbol: str) -> datetime:
-    """Get cache expiry time for symbol based on market type"""
+    """Get cache expiry time for symbol based on market type.
+
+    Uses region-aware session hours so global indices expire when their
+    local market reopens, not when the US market reopens.
+    """
     now = datetime.now(ZoneInfo("America/New_York"))
 
     if symbol in FUTURES_SYMBOLS:
-        # Futures: 30 second cache (very active)
         return now + timedelta(seconds=FUTURES_TTL_SECONDS)
     if is_24_hour_market(symbol):
-        # Crypto: 2 minute cache
         return now + timedelta(seconds=CRYPTO_TTL_SECONDS)
 
-    # Session markets: SHORT TTL when open, cache until next open when closed
-    if is_market_open():
-        # Market open: 2 minute cache for live updates during trading hours
+    # Determine which session governs this symbol
+    region = SYMBOL_REGION.get(symbol, "us")
+
+    if region == "europe":
+        is_open = is_europe_market_open()
+        get_next_open = get_next_europe_open
+    elif region == "asia":
+        is_open = is_asia_market_open()
+        get_next_open = get_next_asia_open
+    else:
+        is_open = is_market_open()
+        get_next_open = get_next_us_open
+
+    if is_open:
         return now + timedelta(seconds=120)
-    # Market closed: cache until next open (prices won't change)
-    return get_next_market_open()
+    return get_next_open()
 
 
 def get_cached_data(symbol: str) -> dict[str, Any] | None:
@@ -99,7 +108,7 @@ def get_cached_data(symbol: str) -> dict[str, Any] | None:
     elif is_24_hour_market(symbol):
         market_type = "crypto"
     else:
-        market_type = "session"
+        market_type = SYMBOL_REGION.get(symbol, "us")
     logger.info(f"Cache HIT: {symbol} ({market_type}, TTL={ttl_remaining:.0f}s)")
     return cast("dict[str, Any]", cached["data"])
 
@@ -121,7 +130,7 @@ def set_cached_data(symbol: str, data: dict[str, Any]) -> None:
     elif is_24_hour_market(symbol):
         market_type = "crypto"
     else:
-        market_type = "session"
+        market_type = SYMBOL_REGION.get(symbol, "us")
     logger.info(f"Cache SET: {symbol} ({market_type}, TTL={ttl_seconds:.0f}s)")
 
 

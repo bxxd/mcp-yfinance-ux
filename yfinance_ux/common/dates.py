@@ -5,7 +5,7 @@ Market hours detection for US, European, and Asian markets.
 Used for market status display and timing-aware data fetching.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from yfinance_ux.common.constants import FRIDAY, SATURDAY, SUNDAY, WEEKEND_START_DAY
@@ -90,6 +90,39 @@ def is_futures_open() -> bool:
     maintenance_start = now_et.replace(hour=17, minute=0, second=0, microsecond=0)
     maintenance_end = now_et.replace(hour=18, minute=0, second=0, microsecond=0)
     return not (maintenance_start <= now_et < maintenance_end)
+
+
+def get_next_us_open() -> datetime:
+    """Get next US market open (9:30am ET)"""
+    now = datetime.now(ZoneInfo("America/New_York"))
+    next_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    if now >= next_open:
+        next_open += timedelta(days=1)
+    while next_open.weekday() >= WEEKEND_START_DAY:
+        next_open += timedelta(days=1)
+    return next_open
+
+
+def get_next_europe_open() -> datetime:
+    """Get next Europe market open (9:00am CET)"""
+    now = datetime.now(ZoneInfo("Europe/Paris"))
+    next_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= next_open:
+        next_open += timedelta(days=1)
+    while next_open.weekday() >= WEEKEND_START_DAY:
+        next_open += timedelta(days=1)
+    return next_open
+
+
+def get_next_asia_open() -> datetime:
+    """Get next Asia market open (9:00am JST)"""
+    now = datetime.now(ZoneInfo("Asia/Tokyo"))
+    next_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= next_open:
+        next_open += timedelta(days=1)
+    while next_open.weekday() >= WEEKEND_START_DAY:
+        next_open += timedelta(days=1)
+    return next_open
 
 
 def get_market_status(region: str) -> str:
