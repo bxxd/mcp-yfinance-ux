@@ -76,13 +76,13 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
         else:
             parts.append(" " * ticker_width)
 
+        # Change column (right-aligned) - before price for slim sidebar visibility
+        change_str = f"{change_pct:+.2f}%"
+        parts.append(f"{change_str:>{change_width}}")
+
         # Price column (right-aligned)
         price_str = f"{price:,.2f}"
         parts.append(f"{price_str:>{price_width}}")
-
-        # Change column (right-aligned)
-        change_str = f"{change_pct:+.2f}%"
-        parts.append(f"{change_str:>{change_width}}")
 
         # RVOL column (right-aligned)
         if show_volume:
@@ -124,8 +124,8 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
             parts.append(f"{'TICKER':<{ticker_width}}")
         else:
             parts.append(" " * ticker_width)
-        parts.append(f"{'PRICE':>{price_width}}")
         parts.append(f"{'CHANGE':>{change_width}}")
+        parts.append(f"{'PRICE':>{price_width}}")
         parts.append(f"{'RVOL':>{rvol_width}}")
         parts.append(f"{'1M':>{mom1m_width}}")
         parts.append(f"{'1Y':>{mom1y_width}}")
@@ -138,8 +138,8 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
         parts = [
             f"{'US FUTURES':<{name_width}}",
             " " * ticker_width,
-            f"{'PRICE':>{price_width}}",
             f"{'CHANGE':>{change_width}}",
+            f"{'PRICE':>{price_width}}",
         ]
         lines.append("".join(parts))
         for key in ["es_futures", "nq_futures", "ym_futures"]:
