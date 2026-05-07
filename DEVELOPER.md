@@ -229,19 +229,34 @@ Log format: `[YYYY/MM/DD HH:MM:SS:XXXX] [LEVEL] message`
 When updating `yfinance_ux/` library:
 
 1. Edit the library
-2. Test: `make all && ./cli ticker TSLA`
-3. System-wide via `.pth` file - changes immediately available to all users
+2. Test inside the MCP repo: `make all && ./cli ticker TSLA` (uses the poetry venv)
+3. Reinstall into the shared idio venv so other consumers (worldview, portfolio tracker) pick up the change:
+   ```bash
+   /opt/idio/python/bin/pip install --upgrade /home/ubuntu/work/prod/mcp-yfinance-ux/yfinance_ux/
+   ```
 
 ## Installation
 
-`yfinance_ux` library is system-wide installable (zero MCP deps). Other projects can import:
+`yfinance_ux` is a normal Python package (its own `pyproject.toml`, zero MCP deps). It installs into the shared idio venv:
+
+```bash
+sudo mkdir -p /opt/idio && sudo chown ubuntu:ubuntu /opt/idio
+python3 -m venv /opt/idio/python
+/opt/idio/python/bin/pip install /home/ubuntu/work/prod/mcp-yfinance-ux/yfinance_ux/
+```
+
+Other idio components import from this venv:
 
 ```python
-from yfinance_ux.fetcher import fetch_price_at_date
+from yfinance_ux.fetcher import fetch_price_at_date, fetch_ticker_info
 from yfinance_ux.calculations import calculate_momentum
 ```
 
-MCP server imports from yfinance_ux. Poetry manages dependencies.
+Consumers wired to `/opt/idio/python/bin/python3`:
+- `evidence` worldview MCP — Rust adapter at `crates/yfinance` calls the venv directly (see `evidence/DEVELOPER.md` → Python venv).
+- portfolio tracker (`update-portfolio.py`) — imports `yfinance_ux.fetcher`; falls back to cost basis if the import fails.
+
+The `mcp-yfinance-ux` server itself runs from this repo's poetry venv (separate from `/opt/idio/python`) — those two venvs share `yfinance_ux` only by both pip-installing it from this directory.
 
 ## yfinance Constraints
 
