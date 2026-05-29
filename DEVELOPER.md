@@ -237,24 +237,27 @@ When updating `yfinance_ux/` library:
 
 ## Installation
 
-`yfinance_ux` is a normal Python package (its own `pyproject.toml`, zero MCP deps). It installs into the shared idio venv:
+`yfinance_ux` is a normal Python package (its own `pyproject.toml`, zero MCP deps). It installs into the shared idio venv at `/opt/idio/python`, and a `.pth` file in system `dist-packages` makes it importable from plain `python3` without any PATH or env-var setup:
 
 ```bash
 sudo mkdir -p /opt/idio && sudo chown ubuntu:ubuntu /opt/idio
 python3 -m venv /opt/idio/python
 /opt/idio/python/bin/pip install /home/ubuntu/work/prod/mcp-yfinance-ux/yfinance_ux/
+echo /opt/idio/python/lib/python3.12/site-packages | \
+    sudo tee /usr/local/lib/python3.12/dist-packages/idio-venv.pth
 ```
 
-Other idio components import from this venv:
+After this, any `python3` (ubuntu, breed, trawler, areed, …) can:
 
 ```python
 from yfinance_ux.fetcher import fetch_price_at_date, fetch_ticker_info
 from yfinance_ux.calculations import calculate_momentum
 ```
 
-Consumers wired to `/opt/idio/python/bin/python3`:
-- `evidence` worldview MCP — Rust adapter at `crates/yfinance` calls the venv directly (see `evidence/DEVELOPER.md` → Python venv).
-- portfolio tracker (`update-portfolio.py`) — imports `yfinance_ux.fetcher`; falls back to cost basis if the import fails.
+Consumers (no special interpreter path needed):
+- `evidence` worldview MCP — Rust adapter at `crates/yfinance` shells `python3` (see `evidence/DEVELOPER.md` → Python runtime).
+- portfolio tracker `update-portfolio.py` — imports `yfinance_ux.fetcher`.
+- `book/scripts/ticker_snapshot.py` — imports `yfinance` (transitive dep of `yfinance_ux`, also exposed via the `.pth`).
 
 The `mcp-yfinance-ux` server itself runs from this repo's poetry venv (separate from `/opt/idio/python`) — those two venvs share `yfinance_ux` only by both pip-installing it from this directory.
 
