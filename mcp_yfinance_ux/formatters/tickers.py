@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 from yfinance_ux.common.constants import (
     BETA_HIGH_THRESHOLD,
     BETA_LOW_THRESHOLD,
+    HISTORY_PERIODS,
+    HISTORY_RVOL_LOOKBACK,
     IDIO_VOL_HIGH_THRESHOLD,
     IDIO_VOL_LOW_THRESHOLD,
     RSI_OVERBOUGHT,
@@ -613,5 +615,150 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:  # noqa: PLR091
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+
+    return "\n".join(lines)
+
+
+def format_volume(volume: float) -> str:
+    """Compact volume with inline units - 1.9M, 380K, 2.4B."""
+    if volume >= 1e9:  # noqa: PLR2004
+        return f"{volume / 1e9:.1f}B"
+    if volume >= 1e6:  # noqa: PLR2004
+        return f"{volume / 1e6:.1f}M"
+    if volume >= 1e3:  # noqa: PLR2004
+        return f"{volume / 1e3:.0f}K"
+    return f"{volume:.0f}"
+
+
+def format_history_summary(
+    summary: dict[str, Any], truncated: bool, has_volume: bool
+) -> list[str]:
+    """Format the ticker_history() summary block - the TL;DR above the series.
+
+    Covers the bars on screen, which is not the whole period when truncated;
+    the heading says so.
+    """
+    lines = ["SUMMARY (SHOWN BARS)" if truncated else "PERIOD SUMMARY"]
+
+    ret = summary["return_pct"]
+    if is_numeric(ret):
+        lines.append(
+            f"{'Return':<16}{ret:>+8.1f}%   "
+            f"{summary['first_close']:.2f} → {summary['last_close']:.2f}"
+        )
+    lines.append(f"{'High':<16}{summary['high']:>9.2f}   ({summary['high_date']})")
+    lines.append(f"{'Low':<16}{summary['low']:>9.2f}   ({summary['low_date']})")
+
+    best, worst = summary["best"], summary["worst"]
+    if best:
+        lines.append(f"{'Best Bar':<16}{best['change_pct']:>+8.2f}%   ({best['date']})")
+    if worst:
+        lines.append(f"{'Worst Bar':<16}{worst['change_pct']:>+8.2f}%   ({worst['date']})")
+
+    if not has_volume:
+        return lines
+
+    lines.append(f"{'Avg Volume':<16}{format_volume(summary['avg_volume']):>9}")
+    unusual_count = summary["unusual_count"]
+    latest = summary["unusual_latest"]
+    if unusual_count and latest:
+        lines.append(
+            f"{'Unusual Volume':<16}{unusual_count:>9}   "
+            f"bars > {UNUSUAL_VOLUME_THRESHOLD:.1f}x RVOL "
+            f"(latest {latest['date']}, {latest['rvol']:.1f}x)"
+        )
+    else:
+        lines.append(
+            f"{'Unusual Volume':<16}{0:>9}   bars > {UNUSUAL_VOLUME_THRESHOLD:.1f}x RVOL"
+        )
+    return lines
+
+
+def format_history_series(bars: list[dict[str, Any]], has_volume: bool) -> list[str]:
+    """Format the ticker_history() bar table.
+
+    Marks unusual volume with ⚠ and a still-forming bar with *.
+    """
+    header = f"{'DATE':<12} {'CLOSE':>9} {'CHG%':>8}"
+    if has_volume:
+        header += f" {'VOLUME':>10} {'RVOL':>7}"
+    lines = [header]
+
+    for bar in bars:
+        chg = bar["change_pct"]
+        rvol = bar["rvol"]
+        chg_str = f"{chg:+7.2f}%" if is_numeric(chg) else " " * 8
+        flag = " ⚠" if is_numeric(rvol) and rvol > UNUSUAL_VOLUME_THRESHOLD else ""
+        if bar.get("partial"):
+            flag = f"{flag} *" if flag else " *"
+
+        row = f"{bar['date']:<12} {bar['close']:>9.2f} {chg_str}"
+        if has_volume:
+            rvol_str = f"{rvol:6.1f}x" if is_numeric(rvol) else " " * 7
+            row += f" {format_volume(bar['volume']):>10} {rvol_str}"
+        lines.append(f"{row}{flag}")
+    return lines
+
+
+def format_ticker_history(data: dict[str, Any]) -> str:
+    """Format ticker_history() screen - BBG Lite price/volume series.
+
+    Summary first (the TL;DR survives a scroll), series below.
+    """
+    if data.get("error"):
+        return f"ERROR: {data['error']}"
+
+    symbol = data["symbol"]
+    period = data["period"]
+    bars = data["bars"]
+    summary = data["summary"]
+    available = data["bars_available"]
+
+    # Indices (^VIX, ^TNX) carry no volume - drop the dead columns rather than
+    # print a wall of zeros
+    has_volume = any(bar["volume"] > 0 for bar in bars)
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    lines = [f"TICKER HISTORY {symbol}"]
+    lines.append("")
+
+    # Orientation: what window, what bar size, how much of it is on screen
+    scope = f"{period} · {data['interval_label']} · {len(bars)} bars"
+    if len(bars) < available:
+        scope += f" (most recent {len(bars)} of {available})"
+    lines.append(scope)
+    lines.append(f"{data['start_date']} → {data['end_date']}")
+    lines.append("")
+
+    lines.extend(format_history_summary(summary, truncated=len(bars) < available,
+                                        has_volume=has_volume))
+    lines.append("")
+
+    # The series
+    lines.append(f"{data['interval_label'].upper()} SERIES")
+    lines.extend(format_history_series(bars, has_volume=has_volume))
+    lines.append("")
+
+    # Footer: source + where to go next
+    if any(bar.get("partial") for bar in bars):
+        lines.append(
+            "* bar still forming - volume incomplete, RVOL provisional"
+            if has_volume
+            else "* bar still forming - period has not closed"
+        )
+    if has_volume:
+        lines.append(f"RVOL = bar volume vs trailing {HISTORY_RVOL_LOOKBACK}-bar average")
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    # Navigation adapts to where you already are in the period ladder
+    ladder = list(HISTORY_PERIODS)
+    idx = ladder.index(period)
+    if idx < len(ladder) - 1:
+        zoom = f"Zoom out: ticker_history('{symbol}', '{ladder[idx + 1]}')"
+    else:
+        zoom = f"Zoom in: ticker_history('{symbol}', '{ladder[0]}')"
+    lines.append(f"Back: ticker('{symbol}') | Options: ticker_options('{symbol}') | {zoom}")
 
     return "\n".join(lines)

@@ -78,6 +78,42 @@ Macro: ^TNX, ^VIX, CL=F, GC=F, EURUSD=X for regression.
             }
         ),
         Tool(
+            name="ticker_history",
+            description="""Price/volume series: one row per bar - close, change%, volume, RVOL.
+
+ticker_history("IPX") -> 3mo daily series + period stats
+ticker_history("IPX", "1y") -> 1y, auto-downsampled to weekly bars
+ticker_history("IPX", "1y", "1d") -> force daily bars (most recent 80)
+
+Use to date a move or read its volume signature. ticker() is the snapshot; this is the series.
+""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Ticker symbol (e.g., 'IPX', 'AAPL')",
+                    },
+                    "period": {
+                        "type": "string",
+                        "description": (
+                            "Window: '1mo', '3mo' (default), '6mo', '1y', '2y', '5y'"
+                        ),
+                        "default": "3mo",
+                    },
+                    "interval": {
+                        "type": "string",
+                        "description": (
+                            "Bar size: 'auto' (default - daily up to 3mo, weekly to 2y, "
+                            "then monthly), or force '1d', '1wk', '1mo'"
+                        ),
+                        "default": "auto",
+                    }
+                },
+                "required": ["symbol"]
+            }
+        ),
+        Tool(
             name="ticker_options",
             description="""Options chain: positioning, IV, skew, term structure, unusual activity.
 
