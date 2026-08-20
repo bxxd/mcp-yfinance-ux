@@ -19,6 +19,7 @@ from mcp_yfinance_ux.formatters.tickers import (
     format_options_summary,
     format_ticker,
     format_ticker_batch,
+    format_ticker_history,
 )
 from mcp_yfinance_ux.logging_config import get_logger
 from yfinance_ux.services.markets import (
@@ -239,6 +240,7 @@ __all__ = [
     "format_sector",
     "format_ticker",
     "format_ticker_batch",
+    "format_ticker_history",
     "get_market_snapshot",
     "get_markets_data",
     "get_options_data",

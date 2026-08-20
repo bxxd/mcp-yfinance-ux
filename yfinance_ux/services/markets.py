@@ -7,10 +7,11 @@ and parallel data fetching for multiple symbols.
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pandas as pd  # type: ignore[import-untyped]
 import yfinance as yf  # type: ignore[import-untyped]
 
 from yfinance_ux.calculations.momentum import calculate_momentum
@@ -18,8 +19,18 @@ from yfinance_ux.calculations.volume import (
     calculate_relative_volume,
     calculate_relative_volume_futures,
 )
-from yfinance_ux.common.constants import CATEGORY_MAPPING, MARKET_SYMBOLS
+from yfinance_ux.common.constants import (
+    CATEGORY_MAPPING,
+    HISTORY_INTERVALS,
+    HISTORY_PERIODS,
+    HISTORY_RVOL_LOOKBACK,
+    HISTORY_RVOL_MIN_BARS,
+    MARKET_SYMBOLS,
+    MAX_HISTORY_ROWS,
+    UNUSUAL_VOLUME_THRESHOLD,
+)
 from yfinance_ux.common.dates import is_market_open
+from yfinance_ux.common.symbols import normalize_ticker_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -169,24 +180,145 @@ def get_market_snapshot(
     return results
 
 
-def get_ticker_history(symbol: str, period: str = "1mo") -> dict[str, Any]:
-    """Get historical price data for a ticker"""
-    try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=period)
+def _is_bar_in_progress(bar_date: date, interval: str) -> bool:
+    """True when the newest bar's period has not closed yet.
 
-        if hist.empty:
-            return {"error": f"No historical data found for {symbol}"}
+    A daily bar is in progress only while the session is open; a weekly or monthly
+    bar is in progress for as long as it covers today.
+    """
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    if interval == "1d":
+        return bar_date == today and is_market_open()
+    if interval == "1wk":
+        return bar_date >= today - timedelta(days=today.weekday())
+    return (bar_date.year, bar_date.month) == (today.year, today.month)
 
+
+def get_ticker_history(  # noqa: PLR0911
+    symbol: str,
+    period: str = "3mo",
+    interval: str = "auto",
+) -> dict[str, Any]:
+    """Fetch the OHLCV series and period stats behind the ticker_history() screen.
+
+    RVOL is measured against the trailing HISTORY_RVOL_LOOKBACK bars, excluding
+    the bar itself. That is why the fetch reaches back further than the display
+    window: every displayed bar gets a fully seeded baseline instead of a ramp of
+    blanks at the top of the screen.
+
+    Args:
+        symbol: Ticker symbol
+        period: Display window - one of HISTORY_PERIODS
+        interval: Bar size - "auto" (period default) or one of HISTORY_INTERVALS
+
+    Returns:
+        dict with bars + summary, or {"error": ...} on failure
+    """
+    symbol = normalize_ticker_symbol(symbol.strip().upper())
+
+    if period not in HISTORY_PERIODS:
+        valid = ", ".join(HISTORY_PERIODS)
+        return {"symbol": symbol, "error": f"Unknown period '{period}'. Use one of: {valid}"}
+
+    window_days, default_interval = HISTORY_PERIODS[period]
+    if interval == "auto":
+        interval = default_interval
+    if interval not in HISTORY_INTERVALS:
+        valid = ", ".join(HISTORY_INTERVALS)
         return {
             "symbol": symbol,
-            "period": period,
-            "data": hist.to_dict("records"),
-            "start_date": hist.index[0].isoformat(),
-            "end_date": hist.index[-1].isoformat(),
+            "error": f"Unknown interval '{interval}'. Use 'auto' or one of: {valid}",
         }
+
+    interval_label, pad_days = HISTORY_INTERVALS[interval]
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    window_start = today - timedelta(days=window_days)
+
+    try:
+        hist = yf.Ticker(symbol).history(
+            start=window_start - timedelta(days=pad_days),
+            end=today + timedelta(days=1),
+            interval=interval,
+        )
     except Exception as e:
-        return {"error": str(e)}
+        return {"symbol": symbol, "error": str(e)}
+
+    if hist.empty:
+        return {"symbol": symbol, "error": f"No historical data found for {symbol}"}
+
+    closes = hist["Close"]
+    volumes = hist["Volume"]
+    change_pct = closes.pct_change() * 100
+
+    # Baseline excludes the bar itself (shift), so RVOL reads "vs what came before"
+    baseline = volumes.rolling(
+        HISTORY_RVOL_LOOKBACK, min_periods=HISTORY_RVOL_MIN_BARS
+    ).mean().shift(1)
+    rvol = volumes / baseline.where(baseline > 0)
+
+    window = [ts for ts in hist.index if ts.date() >= window_start]
+    if not window:
+        last = hist.index[-1].date()
+        return {
+            "symbol": symbol,
+            "error": f"No {symbol} data inside the {period} window (last bar {last})",
+        }
+
+    shown = window[-MAX_HISTORY_ROWS:]
+    bars = [
+        {
+            "date": ts.strftime("%Y-%m-%d"),
+            "close": float(closes[ts]),
+            "change_pct": None if pd.isna(change_pct[ts]) else float(change_pct[ts]),
+            "volume": float(volumes[ts]),
+            "rvol": None if pd.isna(rvol[ts]) else float(rvol[ts]),
+            "partial": False,
+        }
+        for ts in shown
+    ]
+
+    # The newest bar may still be forming - today's session, this week, this month.
+    # Its volume is a partial count, so RVOL reads low for reasons that have nothing
+    # to do with participation. Flag it, and for an open daily bar reuse the intraday
+    # extrapolation ticker() already applies.
+    if _is_bar_in_progress(shown[-1].date(), interval):
+        bars[-1]["partial"] = True
+        if interval == "1d":
+            bars[-1]["rvol"] = calculate_relative_volume(
+                bars[-1]["volume"],
+                None if pd.isna(baseline[shown[-1]]) else float(baseline[shown[-1]]),
+            )
+
+    unusual = [b for b in bars if b["rvol"] is not None and b["rvol"] > UNUSUAL_VOLUME_THRESHOLD]
+    moves = [b for b in bars if b["change_pct"] is not None]
+    high_ts = max(shown, key=lambda ts: hist["High"][ts])
+    low_ts = min(shown, key=lambda ts: hist["Low"][ts])
+    first_close, last_close = bars[0]["close"], bars[-1]["close"]
+
+    return {
+        "symbol": symbol,
+        "period": period,
+        "interval": interval,
+        "interval_label": interval_label,
+        "bars": bars,
+        "bars_available": len(window),
+        "start_date": bars[0]["date"],
+        "end_date": bars[-1]["date"],
+        "summary": {
+            "first_close": first_close,
+            "last_close": last_close,
+            "return_pct": ((last_close - first_close) / first_close * 100) if first_close else None,
+            "high": float(hist["High"][high_ts]),
+            "high_date": high_ts.strftime("%Y-%m-%d"),
+            "low": float(hist["Low"][low_ts]),
+            "low_date": low_ts.strftime("%Y-%m-%d"),
+            "avg_volume": sum(b["volume"] for b in bars) / len(bars),
+            "best": max(moves, key=lambda b: b["change_pct"]) if moves else None,
+            "worst": min(moves, key=lambda b: b["change_pct"]) if moves else None,
+            "unusual_count": len(unusual),
+            "unusual_latest": unusual[-1] if unusual else None,
+        },
+    }
 
 
 def get_markets_data() -> dict[str, dict[str, Any]]:

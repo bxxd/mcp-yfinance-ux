@@ -14,6 +14,7 @@ from mcp_yfinance_ux.formatters.tickers import (
     format_options_summary,
     format_ticker,
     format_ticker_batch,
+    format_ticker_history,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "format_sector",
     "format_ticker",
     "format_ticker_batch",
+    "format_ticker_history",
 ]

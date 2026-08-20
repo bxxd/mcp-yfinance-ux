@@ -85,6 +85,60 @@ def test_call_tool_sector():
     print("✓ sector() tool routing works")
 
 
+def test_call_tool_ticker_history():
+    """Test ticker_history tool routing"""
+    result = call_tool("ticker_history", {"symbol": "TSLA"})
+    assert "TICKER HISTORY TSLA" in result
+    assert "PERIOD SUMMARY" in result
+    assert "DAILY SERIES" in result
+    assert "Source: yfinance" in result
+    print("✓ ticker_history() tool routing works")
+
+
+def test_ticker_history_downsamples():
+    """Long periods downsample so the screen stays scannable"""
+    result = call_tool("ticker_history", {"symbol": "TSLA", "period": "1y"})
+    assert "WEEKLY SERIES" in result
+    assert len(result.splitlines()) < 100, "screen must stay under 100 lines"
+    print("✓ ticker_history() auto-downsamples long periods")
+
+
+def test_ticker_history_truncation_is_stated():
+    """Forcing daily over 1y caps rows - and says so rather than silently cutting"""
+    result = call_tool(
+        "ticker_history", {"symbol": "TSLA", "period": "1y", "interval": "1d"}
+    )
+    assert "most recent" in result
+    assert "SUMMARY (SHOWN BARS)" in result
+    assert len(result.splitlines()) < 100, "screen must stay under 100 lines"
+    print("✓ ticker_history() states truncation")
+
+
+def test_ticker_history_bad_period():
+    """Unknown period returns a usable error listing valid values"""
+    result = call_tool("ticker_history", {"symbol": "TSLA", "period": "7mo"})
+    assert "ERROR" in result
+    assert "3mo" in result, "error should list valid periods"
+    print("✓ ticker_history() rejects unknown period")
+
+
+def test_ticker_history_bad_interval():
+    """Unknown interval returns a usable error listing valid values"""
+    result = call_tool("ticker_history", {"symbol": "TSLA", "interval": "5m"})
+    assert "ERROR" in result
+    assert "1wk" in result, "error should list valid intervals"
+    print("✓ ticker_history() rejects unknown interval")
+
+
+def test_ticker_history_no_volume_symbol():
+    """Indices carry no volume - dead columns are dropped, not filled with zeros"""
+    result = call_tool("ticker_history", {"symbol": "^VIX", "period": "1mo"})
+    assert "TICKER HISTORY ^VIX" in result
+    assert "VOLUME" not in result
+    assert "RVOL" not in result
+    print("✓ ticker_history() drops dead volume columns")
+
+
 def test_call_tool_unknown():
     """Test unknown tool error"""
     try:
@@ -123,12 +177,18 @@ if __name__ == "__main__":
     test_call_tool_ticker_batch()
     test_call_tool_ticker_list()
     test_call_tool_sector()
+    test_call_tool_ticker_history()
+    test_ticker_history_downsamples()
+    test_ticker_history_truncation_is_stated()
+    test_ticker_history_no_volume_symbol()
     print()
 
     # Error handling tests
     print("--- error handling tests ---")
     test_call_tool_unknown()
     test_call_tool_missing_param()
+    test_ticker_history_bad_period()
+    test_ticker_history_bad_interval()
     print()
 
     print("All handler tests passed! ✓")
