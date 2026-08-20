@@ -24,6 +24,31 @@ IDIO_VOL_LOW_THRESHOLD = 15
 UNUSUAL_VOLUME_THRESHOLD = 2.0  # Relative volume threshold for unusual activity flag
 MAX_REASONABLE_RVOL = 100  # Cap for displaying relative volume (filter corrupted data)
 
+# ticker_history() screen
+HISTORY_RVOL_LOOKBACK = 20  # Trailing bars in the RVOL volume baseline
+HISTORY_RVOL_MIN_BARS = 5  # Minimum trailing bars before RVOL is meaningful
+MAX_HISTORY_ROWS = 75  # Displayed-bar cap (keeps the screen under 100 lines)
+
+# Period -> (display window in calendar days, default interval).
+# Longer periods downsample so the series stays inside MAX_HISTORY_ROWS.
+HISTORY_PERIODS: dict[str, tuple[int, str]] = {
+    "1mo": (31, "1d"),
+    "3mo": (93, "1d"),
+    "6mo": (186, "1wk"),
+    "1y": (366, "1wk"),
+    "2y": (731, "1mo"),
+    "5y": (1827, "1mo"),
+}
+
+# Interval -> (label, extra calendar days fetched to seed the RVOL baseline).
+# Pad covers HISTORY_RVOL_LOOKBACK bars before the window so the first
+# displayed bar has a fully seeded baseline.
+HISTORY_INTERVALS: dict[str, tuple[str, int]] = {
+    "1d": ("daily", 45),
+    "1wk": ("weekly", 160),
+    "1mo": ("monthly", 640),
+}
+
 # Category to symbol mappings (for get_market_snapshot)
 # Aligned with Paleologo factor framework
 CATEGORY_MAPPING: dict[str, list[str]] = {

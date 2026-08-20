@@ -12,6 +12,7 @@ make logs       # Tail logs
 ./cli ticker TSLA              # Test single
 ./cli ticker TSLA F GM         # Test batch
 ./cli options PALL             # Test options
+./cli history IPX 3mo          # Test price/volume series
 ```
 
 ## Architecture
@@ -30,7 +31,7 @@ Key files:
 
 ## Tools
 
-Four screen-based tools:
+Five screen-based tools:
 
 **markets()** - Market overview with indices, sectors, styles, commodities, rates. Shows momentum (1M, 1Y).
 
@@ -40,7 +41,33 @@ Four screen-based tools:
 
 **ticker_options(symbol, expiration)** - Options analysis. Shows OI positioning, top strikes, IV structure, skew, term structure, max pain, unusual activity (volume > 2x OI).
 
+**ticker_history(symbol, period, interval)** - Price/volume series, one row per bar: close, change%, volume, RVOL. Summary block first (return, high/low, best/worst bar, unusual-volume count), series below. `ticker()` answers "where does this stand?"; `ticker_history()` answers "when did it move, and on what volume?"
+
 Output: BBG Lite format (dense, scannable text)
+
+### ticker_history bar sizing
+
+The screen stays under 100 lines, so period drives interval:
+
+| period | default interval | bars |
+|---|---|---|
+| 1mo, 3mo | daily | ~21, ~63 |
+| 6mo, 1y | weekly | ~26, ~52 |
+| 2y, 5y | monthly | ~24, ~60 |
+
+`interval` overrides this (`1d`/`1wk`/`1mo`). When the result exceeds `MAX_HISTORY_ROWS` the
+most recent bars win and the header says so (`most recent 75 of 250`) - never a silent cut.
+The summary heading switches to `SUMMARY (SHOWN BARS)` so a truncated view can't be misread
+as covering the whole period.
+
+**RVOL** compares each bar's volume to the trailing `HISTORY_RVOL_LOOKBACK` bars, excluding
+the bar itself. The fetch reaches back past the display window to seed that baseline, so the
+first row on screen has a real RVOL instead of a blank.
+
+**Still-forming bars** are marked `*`: today's session while the market is open, and the
+current week/month at coarser intervals. Their volume is a partial count, which would
+otherwise read as a volume collapse. An open daily bar reuses the same intraday extrapolation
+`ticker()` applies.
 
 ## Core Principles
 

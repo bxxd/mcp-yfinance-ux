@@ -11,6 +11,9 @@ Usage:
   ./cli ticker TSLA,F,GM     # Batch comparison (comma-separated)
   ./cli options PALL         # Options chain analysis (nearest expiration)
   ./cli options PALL 2025-12-20  # Options for specific expiration
+  ./cli history IPX          # Price/volume series (3mo daily)
+  ./cli history IPX 1y       # Series over a longer window
+  ./cli history IPX 1y 1d    # Force daily bars
 
 Fast iteration: Calls handlers.py directly (no MCP transport layer)
 """
@@ -77,6 +80,15 @@ def options_command(symbol: str, expiration: str = "nearest") -> int:
     return 0
 
 
+def history_command(symbol: str, period: str = "3mo", interval: str = "auto") -> int:
+    """Show ticker_history() screen"""
+    output = call_tool(
+        "ticker_history", {"symbol": symbol, "period": period, "interval": interval}
+    )
+    print(output)
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -92,6 +104,9 @@ Examples:
   %(prog)s ticker TSLA,F,GM           # Batch comparison (comma-separated)
   %(prog)s options PALL               # Options analysis (nearest expiration)
   %(prog)s options PALL 2025-12-20    # Options for specific expiration
+  %(prog)s history IPX                # Price/volume series (3mo daily)
+  %(prog)s history IPX 1y             # Longer window (auto-downsamples)
+  %(prog)s history IPX 1y 1d          # Force daily bars
         """
     )
 
@@ -125,6 +140,22 @@ Examples:
         help="Expiration date (default: nearest, or YYYY-MM-DD)",
     )
 
+    # history command
+    history_parser = subparsers.add_parser("history", help="Price/volume series screen")
+    history_parser.add_argument("symbol", help="Ticker symbol (e.g., IPX)")
+    history_parser.add_argument(
+        "period",
+        nargs="?",
+        default="3mo",
+        help="Window: 1mo, 3mo (default), 6mo, 1y, 2y, 5y",
+    )
+    history_parser.add_argument(
+        "interval",
+        nargs="?",
+        default="auto",
+        help="Bar size: auto (default), 1d, 1wk, 1mo",
+    )
+
     return parser.parse_args()
 
 
@@ -135,7 +166,8 @@ async def async_main() -> int:  # noqa: PLR0911
         print("Error: No command specified")
         print(
             "Usage: ./cli list-tools | markets | sector <name> | "
-            "ticker <symbol> | options <symbol> [expiration]"
+            "ticker <symbol> | options <symbol> [expiration] | "
+            "history <symbol> [period] [interval]"
         )
         return 1
 
@@ -153,6 +185,9 @@ async def async_main() -> int:  # noqa: PLR0911
 
     if args.command == "options":
         return options_command(args.symbol, args.expiration)
+
+    if args.command == "history":
+        return history_command(args.symbol, args.period, args.interval)
 
     print(f"Unknown command: {args.command}")
     return 1

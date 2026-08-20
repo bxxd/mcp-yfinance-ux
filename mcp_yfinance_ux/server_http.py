@@ -26,7 +26,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
-from .handlers import call_tool as handle_tool, normalize_symbols
+from .cache import get_cached_data
+from .handlers import call_tool as handle_tool
+from .handlers import normalize_symbols
 from .logging_config import get_logger, setup_async_logging
 from .tools import get_mcp_tools
 
@@ -117,8 +119,6 @@ async def handle_prices(request: Request) -> JSONResponse:
         return JSONResponse({"error": "no valid tickers"}, status_code=400)
 
     logger.info(f"prices() batch: {len(symbols)} tickers")
-
-    from .cache import get_cached_data
 
     result: dict[str, dict[str, float | None]] = {}
     for sym in symbols:

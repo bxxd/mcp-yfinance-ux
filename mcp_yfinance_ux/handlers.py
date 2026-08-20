@@ -18,9 +18,11 @@ from .market_data import (
     format_sector,
     format_ticker,
     format_ticker_batch,
+    format_ticker_history,
     get_markets_data,
     get_options_data,
     get_sector_data,
+    get_ticker_history,
     get_ticker_screen_data,
     get_ticker_screen_data_batch,
 )
@@ -94,6 +96,18 @@ def handle_ticker_options(arguments: dict[str, Any]) -> str:
     return format_options(data)
 
 
+def handle_ticker_history(arguments: dict[str, Any]) -> str:
+    """Handle ticker_history() tool call"""
+    symbol = arguments.get("symbol")
+    if not symbol:
+        msg = "ticker_history() requires 'symbol' parameter"
+        raise ValueError(msg)
+    period = arguments.get("period", "3mo")
+    interval = arguments.get("interval", "auto")
+    data = get_ticker_history(symbol, period, interval)
+    return format_ticker_history(data)
+
+
 def call_tool(name: str, arguments: dict[str, Any]) -> str:
     """
     Route tool call to appropriate handler.
@@ -112,6 +126,9 @@ def call_tool(name: str, arguments: dict[str, Any]) -> str:
 
     if name == "ticker_options":
         return handle_ticker_options(arguments)
+
+    if name == "ticker_history":
+        return handle_ticker_history(arguments)
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)
