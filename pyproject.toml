@@ -8,7 +8,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
-yfinance = "^0.2.48"
+yfinance = "^1.5.1"
 mcp = "^1.1.2"
 scipy = "^1.11.0"
 
