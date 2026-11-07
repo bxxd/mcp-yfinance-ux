@@ -15,11 +15,15 @@ Configuration:
 import logging
 import os
 import signal
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import anyio
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http import StreamableHTTPServerTransport
 from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -73,6 +77,12 @@ mcp_server = Server("yfinance-mcp")
 
 # SSE transport for multi-client support
 sse_transport = SseServerTransport("/messages")
+
+# Streamable HTTP transport — stateless, survives server restarts
+streamable_transport = StreamableHTTPServerTransport(
+    mcp_session_id=None,
+    is_json_response_enabled=True,
+)
 
 
 @mcp_server.list_tools()  # type: ignore[misc,no-untyped-call]
@@ -151,8 +161,14 @@ async def handle_sse(request: Request) -> Response:
         request.scope, request.receive, request._send
     ) as streams:
         logger.info("SSE connected, running MCP server loop")
+        # stateless: a client whose SSE stream reconnects after a server restart
+        # opens a new session without repeating initialize, and a stateful session
+        # rejects every call on it until the agent reconnects by hand.
         await mcp_server.run(
-            streams[0], streams[1], mcp_server.create_initialization_options()
+            streams[0],
+            streams[1],
+            mcp_server.create_initialization_options(),
+            stateless=True,
         )
         logger.info(f"SSE disconnected from {client_addr}")
 
@@ -166,13 +182,36 @@ async def handle_sse(request: Request) -> Response:
     )
 
 
+@asynccontextmanager
+async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+    """Run the MCP server against the streamable transport for the app's lifetime."""
+    async with (
+        streamable_transport.connect() as (read_stream, write_stream),
+        anyio.create_task_group() as tg,
+    ):
+
+        async def run_streamable() -> None:
+            await mcp_server.run(
+                read_stream,
+                write_stream,
+                mcp_server.create_initialization_options(),
+                stateless=True,
+            )
+
+        tg.start_soon(run_streamable)
+        yield
+        tg.cancel_scope.cancel()
+
+
 # Starlette application
 app = Starlette(
+    lifespan=lifespan,
     routes=[
         Route("/ping", endpoint=handle_ping, methods=["GET"]),
         Route("/api/prices", endpoint=handle_prices, methods=["GET"]),
         Route("/shutdown", endpoint=handle_shutdown, methods=["POST"]),
+        Mount("/mcp", app=streamable_transport.handle_request),
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=sse_transport.handle_post_message),
-    ]
+    ],
 )
